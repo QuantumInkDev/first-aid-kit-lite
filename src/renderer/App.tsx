@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 // Import types from preload script
-import type { SystemInfo, AppSettings } from '../preload/preload';
+import type { SystemInfo } from '../preload/preload';
+
+// Import ShadCN components
+import { Button } from '@/components/ui/button';
 
 // Components (these will be implemented in Phase 4)
 // import { AppLayout } from './components/layout/AppLayout';
@@ -23,19 +26,19 @@ const PlaceholderLayout: React.FC<{ children: React.ReactNode; title: string }> 
               v0.1.0-alpha
             </span>
           </div>
-          <nav className="flex space-x-4">
-            <button className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+          <nav className="flex space-x-2">
+            <Button variant="ghost" size="sm">
               Dashboard
-            </button>
-            <button className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            </Button>
+            <Button variant="ghost" size="sm">
               Scripts
-            </button>
-            <button className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            </Button>
+            <Button variant="ghost" size="sm">
               Settings
-            </button>
-            <button className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+            </Button>
+            <Button variant="ghost" size="sm">
               Logs
-            </button>
+            </Button>
           </nav>
         </div>
       </div>
@@ -162,18 +165,18 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <button className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+              <Button variant="outline" className="w-full justify-start text-sm">
                 🧹 Clear Temporary Files
-              </button>
-              <button className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+              </Button>
+              <Button variant="outline" className="w-full justify-start text-sm">
                 🌐 Flush DNS Cache
-              </button>
-              <button className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+              </Button>
+              <Button variant="outline" className="w-full justify-start text-sm">
                 🔄 Restart Explorer
-              </button>
-              <button className="w-full text-left px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 rounded-md transition-colors">
+              </Button>
+              <Button variant="outline" className="w-full justify-start text-sm">
                 ⚙️ More Scripts →
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -256,9 +259,9 @@ const Scripts: React.FC = () => (
               </span>
             </div>
             <p className="text-sm text-gray-600 mb-3">{script.description}</p>
-            <button className="w-full btn btn-sm btn-secondary" disabled>
+            <Button variant="secondary" size="sm" className="w-full" disabled>
               Coming Soon
-            </button>
+            </Button>
           </div>
         ))}
       </div>
@@ -284,17 +287,32 @@ const Logs: React.FC = () => (
 
 // Main App component
 export const App: React.FC = () => {
-  const [electronReady, setElectronReady] = useState(false);
+  console.log('🚀 REACT APP: Component started, electronReady state initialization');
+  const [electronReady, setElectronReady] = useState(true); // Force to true for debugging
 
   useEffect(() => {
     // Check if electron API is available
+    let attempts = 0;
+    const maxAttempts = 50; // 5 seconds total
+    
     const checkElectronAPI = () => {
+      attempts++;
+      console.log(`⏳ REACT: Checking for Electron API (attempt ${attempts}/${maxAttempts})...`);
+      console.log('🔍 REACT: typeof window.electronAPI:', typeof window.electronAPI);
+      console.log('🔍 REACT: window.electronAPI exists:', !!window.electronAPI);
+      
       if (window.electronAPI) {
         setElectronReady(true);
         console.log('✅ Electron API ready');
-      } else {
-        console.log('⏳ Waiting for Electron API...');
+        console.log('🎉 Available methods:', Object.keys(window.electronAPI));
+      } else if (attempts < maxAttempts) {
+        console.log(`⏳ Waiting for Electron API... (${attempts}/${maxAttempts})`);
         setTimeout(checkElectronAPI, 100);
+      } else {
+        console.error('❌ Electron API never became available after 5 seconds');
+        console.log('🔍 Window properties containing "electron":', 
+          Object.keys(window).filter(k => k.toLowerCase().includes('electron')));
+        setElectronReady(true); // Show UI anyway for debugging
       }
     };
 

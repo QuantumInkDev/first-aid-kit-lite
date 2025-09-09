@@ -8,7 +8,7 @@ import './styles/globals.css';
 // Declare the electron API that's injected by preload script
 declare global {
   interface Window {
-    electronAPI: typeof import('../preload/preload').ElectronAPI;
+    electronAPI: import('@preload/preload').ElectronAPI;
   }
 }
 
@@ -42,13 +42,15 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Handle hot module replacement in development
-if (module.hot) {
-  module.hot.accept('./App', () => {
-    const NextApp = require('./App').App;
-    root.render(
-      <React.StrictMode>
-        <NextApp />
-      </React.StrictMode>
-    );
+if (import.meta.hot) {
+  import.meta.hot.accept('./App', (newModule) => {
+    if (newModule) {
+      const NextApp = newModule.App;
+      root.render(
+        <React.StrictMode>
+          <NextApp />
+        </React.StrictMode>
+      );
+    }
   });
 }

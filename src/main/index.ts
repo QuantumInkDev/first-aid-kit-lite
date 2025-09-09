@@ -1,6 +1,6 @@
 import { app, BrowserWindow, protocol, ipcMain } from 'electron';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -35,14 +35,110 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
-declare const MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY: string;
-declare const MAIN_WINDOW_WEBPACK_ENTRY: string;
+// Development/production mode detection
+const isDevelopment = process.env.NODE_ENV === 'development';
+
+// Paths for Vite builds  
+import { resolve } from 'path';
+const preloadPath = resolve(__dirname, '../preload/preload.js');
+const rendererUrl = isDevelopment 
+  ? 'http://localhost:5173'
+  : resolve(__dirname, '../renderer/index.html');
+
+console.log('🔧 Main process: Preload path (resolve):', preloadPath);
+console.log('🔧 Main process: __dirname:', __dirname);
+
+// Check if preload file exists
+import { existsSync } from 'fs';
+if (existsSync(preloadPath)) {
+  console.log('✅ Preload file exists at:', preloadPath);
+} else {
+  console.error('❌ Preload file NOT found at:', preloadPath);
+}
+
+// Note: preload script should only run in preload context, not main process
 
 let mainWindow: BrowserWindow | null = null;
 
+// Session management
+let isQuitting = false;
+let sessionStateFile: string;
+const pendingOperations: Set<Promise<any>> = new Set();
+
+// Session management functions
+const initializeSessionManagement = () => {
+  sessionStateFile = join(app.getPath('userData'), 'session-state.json');
+  console.log('📁 Session state file:', sessionStateFile);
+};
+
+const saveSessionState = (customState?: any) => {
+  if (!mainWindow) return;
+  
+  try {
+    const bounds = mainWindow.getBounds();
+    const sessionState = {
+      windowBounds: bounds,
+      isMaximized: mainWindow.isMaximized(),
+      sessionTimestamp: Date.now(),
+      lastActiveScript: null,
+      pendingExecutions: [],
+      unsavedSettings: {},
+      ...customState
+    };
+    
+    writeFileSync(sessionStateFile, JSON.stringify(sessionState, null, 2));
+    console.log('💾 Session state saved');
+  } catch (error) {
+    console.error('❌ Failed to save session state:', error);
+  }
+};
+
+const restoreSessionState = () => {
+  try {
+    if (!existsSync(sessionStateFile)) {
+      console.log('📝 No previous session state found');
+      return null;
+    }
+    
+    const sessionData = JSON.parse(readFileSync(sessionStateFile, 'utf8'));
+    console.log('📂 Session state restored');
+    return sessionData;
+  } catch (error) {
+    console.error('❌ Failed to restore session state:', error);
+    return null;
+  }
+};
+
+const performGracefulShutdown = async (): Promise<boolean> => {
+  console.log('🔄 Starting graceful shutdown sequence...');
+  
+  try {
+    // Save current session state
+    saveSessionState();
+    
+    // Wait for any pending operations to complete
+    if (pendingOperations.size > 0) {
+      console.log(`⏳ Waiting for ${pendingOperations.size} pending operations...`);
+      await Promise.allSettled([...pendingOperations]);
+    }
+    
+    // Notify renderer about shutdown
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('session:before-quit');
+    }
+    
+    console.log('✅ Graceful shutdown completed');
+    return true;
+  } catch (error) {
+    console.error('❌ Error during graceful shutdown:', error);
+    return false;
+  }
+};
+
 const createWindow = (): void => {
-  // Create the browser window with security-first configuration
-  mainWindow = new BrowserWindow({
+  // Restore previous session state
+  const sessionState = restoreSessionState();
+  let windowOptions: any = {
     height: 800,
     width: 1200,
     minHeight: 600,
@@ -50,10 +146,26 @@ const createWindow = (): void => {
     title: 'First Aid Kit Lite',
     titleBarStyle: 'default',
     show: false, // Don't show until ready-to-show
+  };
+
+  // Apply restored window bounds if available
+  if (sessionState?.windowBounds) {
+    windowOptions = {
+      ...windowOptions,
+      x: sessionState.windowBounds.x,
+      y: sessionState.windowBounds.y,
+      width: sessionState.windowBounds.width,
+      height: sessionState.windowBounds.height,
+    };
+    console.log('🪟 Restoring window bounds from previous session');
+  }
+
+  // Create the browser window with security-first configuration
+  mainWindow = new BrowserWindow({
+    ...windowOptions,
     webPreferences: {
-      // Security: Enable context isolation and disable node integration
-      contextIsolation: true,
-      enableRemoteModule: false,
+      // Security: Temporarily disable context isolation for debugging
+      contextIsolation: false, // TODO: Re-enable after fixing API exposure
       nodeIntegration: false,
       nodeIntegrationInWorker: false,
       nodeIntegrationInSubFrames: false,
@@ -61,23 +173,58 @@ const createWindow = (): void => {
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
-      preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY,
+      preload: preloadPath,
       // Additional security measures
       additionalArguments: ['--disable-dev-shm-usage'],
     },
   });
 
   // Load the index.html of the app
-  mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY);
+  if (isDevelopment) {
+    mainWindow.loadURL(rendererUrl);
+  } else {
+    mainWindow.loadFile(rendererUrl);
+  }
 
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
+      console.log('🪟 Window ready to show, displaying window');
       mainWindow.show();
+      
+      // Restore maximized state if needed
+      if (sessionState?.isMaximized) {
+        mainWindow.maximize();
+        console.log('🪟 Window maximized from previous session');
+      }
       
       // Open DevTools in development
       if (process.env.NODE_ENV === 'development') {
+        console.log('🛠️ Opening DevTools for debugging');
         mainWindow.webContents.openDevTools();
+      }
+    }
+  });
+
+  // Debug renderer console messages
+  mainWindow.webContents.on('console-message', (_, level, message) => {
+    console.log(`🌐 RENDERER: [${level}] ${message}`);
+  });
+
+  // Handle window close request
+  mainWindow.on('close', async (event) => {
+    if (!isQuitting) {
+      event.preventDefault();
+      console.log('🚪 Window close requested, performing graceful shutdown...');
+      
+      isQuitting = true;
+      const shutdownSuccess = await performGracefulShutdown();
+      
+      if (shutdownSuccess) {
+        mainWindow?.destroy();
+      } else {
+        isQuitting = false;
+        console.warn('⚠️ Shutdown was not completed successfully');
       }
     }
   });
@@ -86,6 +233,15 @@ const createWindow = (): void => {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Auto-save session state periodically
+  const autoSaveInterval = setInterval(() => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      saveSessionState();
+    } else {
+      clearInterval(autoSaveInterval);
+    }
+  }, 30000); // Save every 30 seconds
 
   // Security: Prevent new window creation
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -98,7 +254,10 @@ const createWindow = (): void => {
     const parsedUrl = new URL(navigationUrl);
     
     // Allow navigation only to our own content
-    if (parsedUrl.origin !== new URL(MAIN_WINDOW_WEBPACK_ENTRY).origin) {
+    if (isDevelopment && parsedUrl.origin !== new URL(rendererUrl).origin) {
+      event.preventDefault();
+      console.warn('Blocked navigation to:', navigationUrl);
+    } else if (!isDevelopment && !navigationUrl.startsWith('file://')) {
       event.preventDefault();
       console.warn('Blocked navigation to:', navigationUrl);
     }
@@ -124,7 +283,26 @@ const handleProtocolUrl = (url: string): void => {
 };
 
 // App event handlers
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Install DevTools extensions in development
+  if (isDevelopment) {
+    try {
+      const installExtension = (await import('electron-devtools-installer')).default;
+      const { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS } = await import('electron-devtools-installer');
+      
+      console.log('🛠️ Installing DevTools extensions...');
+      
+      await installExtension([REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS], {
+        loadExtensionOptions: { allowFileAccess: true },
+        forceDownload: false,
+      });
+      
+      console.log('✅ DevTools extensions installed successfully');
+    } catch (error) {
+      console.warn('⚠️ Failed to install DevTools extensions:', error);
+    }
+  }
+
   createWindow();
 
   // Register protocol handlers
@@ -145,7 +323,7 @@ app.whenReady().then(() => {
 });
 
 // Handle protocol URLs on Windows/Linux
-app.on('second-instance', (event, commandLine, workingDirectory) => {
+app.on('second-instance', (_, commandLine) => {
   // Someone tried to run a second instance, focus our window instead
   if (mainWindow) {
     if (mainWindow.isMinimized()) {
@@ -197,13 +375,19 @@ process.on('unhandledRejection', (reason, promise) => {
   // For now, just log the error and continue
 });
 
-// Development: Enable live reload for Electron too
-if (process.env.NODE_ENV === 'development') {
-  require('electron-reload')(__dirname, {
-    electron: join(__dirname, '..', 'node_modules', '.bin', 'electron'),
-    hardResetMethod: 'exit',
-  });
-}
+// Development: Electron live reload is handled by electron-vite
+
+// IPC Handlers - Basic implementation for testing
+ipcMain.handle('system:get-info', async () => {
+  console.log('📡 IPC: system:get-info called');
+  return {
+    platform: process.platform,
+    version: process.version,
+    arch: process.arch,
+    powershellVersion: 'Unknown',
+    isElevated: false,
+  };
+});
 
 console.log('First Aid Kit Lite main process initialized');
 console.log('Protocol handlers registered for: first-aid-kit://, fak://');

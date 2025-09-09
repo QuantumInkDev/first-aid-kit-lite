@@ -1,4 +1,8 @@
+console.log('🚀 PRELOAD SCRIPT STARTING - This should appear first!');
+
 import { contextBridge, ipcRenderer } from 'electron';
+
+console.log('🔧 PRELOAD SCRIPT: Imports loaded successfully');
 
 // Define the API that will be available in the renderer process
 export interface ElectronAPI {
@@ -34,6 +38,13 @@ export interface ElectronAPI {
   
   onSettingsChanged: (callback: (settings: AppSettings) => void) => void;
   removeSettingsListener: () => void;
+
+  // Session management
+  requestSessionEnd: () => Promise<boolean>;
+  saveSessionState: (state: SessionState) => Promise<void>;
+  restoreSessionState: () => Promise<SessionState | null>;
+  onBeforeQuit: (callback: () => Promise<boolean>) => void;
+  removeBeforeQuitListener: () => void;
 }
 
 // Type definitions (these will be moved to shared types later)
@@ -121,6 +132,20 @@ interface ExecutionUpdate {
   error?: string;
 }
 
+interface SessionState {
+  windowBounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  isMaximized: boolean;
+  lastActiveScript?: string;
+  pendingExecutions: ExecutionUpdate[];
+  unsavedSettings: Partial<AppSettings>;
+  sessionTimestamp: number;
+}
+
 // IPC channel names (these will be moved to shared constants later)
 const IPC_CHANNELS = {
   // System
@@ -149,6 +174,12 @@ const IPC_CHANNELS = {
   
   // Protocol handling
   PROTOCOL_REQUEST: 'protocol:request',
+  
+  // Session management
+  SESSION_END_REQUEST: 'session:end-request',
+  SESSION_SAVE_STATE: 'session:save-state',
+  SESSION_RESTORE_STATE: 'session:restore-state',
+  SESSION_BEFORE_QUIT: 'session:before-quit',
 } as const;
 
 // Create the API implementation
@@ -211,16 +242,67 @@ const electronAPI: ElectronAPI = {
   removeSettingsListener: () => {
     ipcRenderer.removeAllListeners(IPC_CHANNELS.SETTINGS_CHANGED);
   },
+
+  // Session management
+  requestSessionEnd: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_END_REQUEST),
+  
+  saveSessionState: (state: SessionState) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SESSION_SAVE_STATE, state),
+  
+  restoreSessionState: () => ipcRenderer.invoke(IPC_CHANNELS.SESSION_RESTORE_STATE),
+  
+  onBeforeQuit: (callback: () => Promise<boolean>) => {
+    ipcRenderer.on(IPC_CHANNELS.SESSION_BEFORE_QUIT, async (_event) => {
+      const canQuit = await callback();
+      _event.returnValue = canQuit;
+    });
+  },
+  
+  removeBeforeQuitListener: () => {
+    ipcRenderer.removeAllListeners(IPC_CHANNELS.SESSION_BEFORE_QUIT);
+  },
 };
 
 // Expose the API to the renderer process
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+console.log('🔧 Preload script: About to expose electronAPI to main world');
+
+// Check if context isolation is enabled by trying to use contextBridge
+try {
+  console.log('🔧 Attempting to use contextBridge...');
+  contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+  console.log('🔧 Successfully used contextBridge (context isolation enabled)');
+} catch (error) {
+  console.log('🔧 contextBridge failed, using direct window assignment (context isolation disabled)');
+  console.log('🔧 contextBridge error:', (error as Error).message);
+  (window as any).electronAPI = electronAPI;
+}
+
+console.log('🔧 Preload script: electronAPI exposed successfully');
 
 // Additional security: Remove dangerous globals in development
 if (process.env.NODE_ENV === 'development') {
-  console.log('Preload script loaded successfully');
-  console.log('Available API methods:', Object.keys(electronAPI));
+  console.log('✅ Preload script loaded successfully');
+  console.log('📋 Available API methods:', Object.keys(electronAPI));
 }
+
+// Verify the API was exposed correctly with a small delay
+window.addEventListener('DOMContentLoaded', () => {
+  console.log('🌐 DOM loaded, checking for electronAPI...');
+  
+  // Check immediately
+  console.log('🔍 window.electronAPI exists (immediate):', typeof window.electronAPI !== 'undefined');
+  
+  // Check again after a small delay to see if timing is the issue
+  setTimeout(() => {
+    console.log('🔍 window.electronAPI exists (delayed):', typeof window.electronAPI !== 'undefined');
+    if (window.electronAPI) {
+      console.log('🎉 electronAPI is available with methods:', Object.keys(window.electronAPI));
+    } else {
+      console.error('❌ electronAPI is still not available on window object');
+      console.log('🔍 Available on window:', Object.keys(window).filter(k => k.includes('electron') || k.includes('API')));
+    }
+  }, 100);
+});
 
 // Security: Prevent context isolation bypass
 window.addEventListener('DOMContentLoaded', () => {
@@ -239,4 +321,5 @@ export type {
   NotificationType,
   NotificationOptions,
   ExecutionUpdate,
+  SessionState,
 };
