@@ -254,7 +254,10 @@ const electronAPI: ElectronAPI = {
   onBeforeQuit: (callback: () => Promise<boolean>) => {
     ipcRenderer.on(IPC_CHANNELS.SESSION_BEFORE_QUIT, async (_event) => {
       const canQuit = await callback();
-      _event.returnValue = canQuit;
+      // Note: returnValue is used for synchronous responses in main process
+      if ('returnValue' in _event) {
+        (_event as any).returnValue = canQuit;
+      }
     });
   },
   
@@ -266,15 +269,17 @@ const electronAPI: ElectronAPI = {
 // Expose the API to the renderer process
 console.log('🔧 Preload script: About to expose electronAPI to main world');
 
-// Check if context isolation is enabled by trying to use contextBridge
+// Expose API through contextBridge with context isolation enabled
 try {
-  console.log('🔧 Attempting to use contextBridge...');
+  console.log('🔧 Exposing electronAPI through contextBridge...');
   contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-  console.log('🔧 Successfully used contextBridge (context isolation enabled)');
+  console.log('✅ Successfully exposed electronAPI through contextBridge');
 } catch (error) {
-  console.log('🔧 contextBridge failed, using direct window assignment (context isolation disabled)');
-  console.log('🔧 contextBridge error:', (error as Error).message);
-  (window as any).electronAPI = electronAPI;
+  console.error('❌ Failed to expose electronAPI through contextBridge:', (error as Error).message);
+  // In production, we should throw here as context isolation must be enabled
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Context isolation must be enabled in production');
+  }
 }
 
 console.log('🔧 Preload script: electronAPI exposed successfully');

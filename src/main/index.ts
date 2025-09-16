@@ -1,6 +1,6 @@
-import { app, BrowserWindow, protocol, ipcMain } from 'electron';
+import { app, BrowserWindow, protocol } from 'electron';
 import { join } from 'path';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (require('electron-squirrel-startup')) {
@@ -164,18 +164,21 @@ const createWindow = (): void => {
   mainWindow = new BrowserWindow({
     ...windowOptions,
     webPreferences: {
-      // Security: Temporarily disable context isolation for debugging
-      contextIsolation: false, // TODO: Re-enable after fixing API exposure
+      // Security: Enable context isolation for production security
+      contextIsolation: true,
       nodeIntegration: false,
       nodeIntegrationInWorker: false,
       nodeIntegrationInSubFrames: false,
-      sandbox: false, // Disabled to allow preload script
+      sandbox: false, // Disabled to allow preload script access to Node.js APIs
       webSecurity: true,
       allowRunningInsecureContent: false,
       experimentalFeatures: false,
       preload: preloadPath,
       // Additional security measures
       additionalArguments: ['--disable-dev-shm-usage'],
+      // Security: Disable dangerous features
+      enableWebSQL: false,
+      // Security: Content Security Policy handled in HTML
     },
   });
 
@@ -305,6 +308,9 @@ app.whenReady().then(async () => {
 
   createWindow();
 
+  // Initialize core services after window creation
+  await initializeServices();
+
   // Register protocol handlers
   if (!app.isDefaultProtocolClient('first-aid-kit')) {
     app.setAsDefaultProtocolClient('first-aid-kit');
@@ -377,17 +383,245 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Development: Electron live reload is handled by electron-vite
 
-// IPC Handlers - Basic implementation for testing
-ipcMain.handle('system:get-info', async () => {
-  console.log('📡 IPC: system:get-info called');
-  return {
-    platform: process.platform,
-    version: process.version,
-    arch: process.arch,
-    powershellVersion: 'Unknown',
-    isElevated: false,
-  };
-});
+// Initialize core services
+import { createServiceLogger } from './services/logger';
+import { getDatabaseService } from './services/database';
+import { createValidatedIpcHandler } from './services/ipc-validator';
+import { getScriptRegistryService } from './services/script-registry';
+import { getPowerShellExecutorService } from './services/powershell-executor';
+import ScriptValidatorService from './services/script-validator';
+
+const mainLogger = createServiceLogger('main-process');
+
+// Initialize services after app is ready
+const initializeServices = async (): Promise<void> => {
+  try {
+    mainLogger.info('Initializing core services...');
+    
+    // Initialize database service
+    const db = getDatabaseService();
+    const dbHealth = db.healthCheck();
+    if (dbHealth.status !== 'healthy') {
+      throw new Error(`Database unhealthy: ${dbHealth.details}`);
+    }
+    mainLogger.info('Database service initialized successfully');
+
+    // Initialize script registry service
+    const scriptRegistry = getScriptRegistryService();
+    if (!scriptRegistry.isInitialized()) {
+      throw new Error('Script registry failed to initialize');
+    }
+    mainLogger.info('Script registry service initialized successfully');
+
+    // Initialize PowerShell executor service
+    getPowerShellExecutorService();
+    mainLogger.info('PowerShell executor service initialized successfully');
+
+    // Initialize session management
+    initializeSessionManagement();
+    mainLogger.info('Session management initialized successfully');
+
+    // Set up validated IPC handlers
+    setupIpcHandlers();
+    mainLogger.info('IPC handlers setup completed');
+
+    mainLogger.info('All core services initialized successfully');
+    
+  } catch (error) {
+    mainLogger.error('Failed to initialize core services', { 
+      error: (error as Error).message 
+    });
+    throw error;
+  }
+};
+
+// Set up IPC handlers with validation
+const setupIpcHandlers = (): void => {
+  // System information handler
+  createValidatedIpcHandler('system:get-info', async () => {
+    mainLogger.debug('System info requested');
+    return {
+      platform: process.platform,
+      version: process.version,
+      arch: process.arch,
+      powershellVersion: 'Unknown', // TODO: Implement PowerShell version detection
+      isElevated: false, // TODO: Implement elevation detection
+    };
+  });
+
+  // Settings handlers
+  createValidatedIpcHandler('settings:get', async () => {
+    const db = getDatabaseService();
+    const settings = db.getAllSettings();
+    mainLogger.debug('Settings retrieved');
+    return settings;
+  });
+
+  createValidatedIpcHandler('settings:update', async (settings) => {
+    const db = getDatabaseService();
+    for (const [key, value] of Object.entries(settings)) {
+      db.setSetting(key, value);
+    }
+    mainLogger.info('Settings updated', { updatedKeys: Object.keys(settings) });
+    
+    // Notify renderer of settings change
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('settings:changed', db.getAllSettings());
+    }
+  });
+
+  // Session management handlers
+  createValidatedIpcHandler('session:save-state', async (state) => {
+    saveSessionState(state);
+    mainLogger.debug('Session state saved via IPC');
+    return true;
+  });
+
+  createValidatedIpcHandler('session:restore-state', async () => {
+    const state = restoreSessionState();
+    mainLogger.debug('Session state restored via IPC');
+    return state;
+  });
+
+  createValidatedIpcHandler('session:end-request', async () => {
+    mainLogger.info('Session end requested via IPC');
+    const success = await performGracefulShutdown();
+    if (success) {
+      app.quit();
+    }
+    return success;
+  });
+
+  // Script management handlers
+  createValidatedIpcHandler('script:get-all', async () => {
+    const scriptRegistry = getScriptRegistryService();
+    const scripts = scriptRegistry.getAllScripts();
+    mainLogger.debug('All scripts retrieved', { count: scripts.length });
+    return scripts;
+  });
+
+  createValidatedIpcHandler('script:get-details', async (data: { scriptId: string }) => {
+    const scriptRegistry = getScriptRegistryService();
+    const script = scriptRegistry.getScript(data.scriptId);
+    
+    if (!script) {
+      throw new Error(`Script not found: ${data.scriptId}`);
+    }
+
+    // Get validation result for the script
+    const validationResult = await ScriptValidatorService.validateScript(script);
+    
+    mainLogger.debug('Script details retrieved', { 
+      scriptId: data.scriptId,
+      securityLevel: validationResult.securityLevel
+    });
+
+    return {
+      ...script,
+      validation: validationResult
+    };
+  });
+
+  createValidatedIpcHandler('script:execute', async (data: { scriptId: string; parameters?: Record<string, any> }) => {
+    const scriptRegistry = getScriptRegistryService();
+    const psExecutor = getPowerShellExecutorService();
+    
+    // Get script definition
+    const scriptDef = scriptRegistry.getScript(data.scriptId);
+    if (!scriptDef) {
+      throw new Error(`Script not found: ${data.scriptId}`);
+    }
+
+    // Validate script before execution
+    const validationResult = await ScriptValidatorService.validateScript(scriptDef);
+    
+    // Create execution request
+    const executionRequest = {
+      scriptId: data.scriptId,
+      scriptDefinition: scriptDef,
+      parameters: data.parameters,
+      validationResult,
+      requestId: '', // Will be generated by executor
+      source: 'manual' as const
+    };
+
+    // Execute script
+    const executionId = await psExecutor.executeScript(executionRequest);
+    
+    mainLogger.info('Script execution initiated', {
+      scriptId: data.scriptId,
+      executionId,
+      hasParameters: !!data.parameters
+    });
+
+    return { executionId };
+  });
+
+  createValidatedIpcHandler('script:cancel', async (data: { executionId: string }) => {
+    const psExecutor = getPowerShellExecutorService();
+    const success = psExecutor.cancelExecution(data.executionId, 'user_request');
+    
+    mainLogger.info('Script execution cancellation requested', {
+      executionId: data.executionId,
+      success
+    });
+
+    return { success };
+  });
+
+  createValidatedIpcHandler('log:get', async (filters?: any) => {
+    const db = getDatabaseService();
+    const logs = db.getExecutionLogs(filters?.limit || 100, filters?.offset || 0);
+    
+    mainLogger.debug('Execution logs retrieved', { 
+      count: logs.length,
+      hasFilters: !!filters
+    });
+
+    return logs;
+  });
+
+  createValidatedIpcHandler('log:export', async (data: { format: 'json' | 'csv'; filters?: any }) => {
+    const db = getDatabaseService();
+    const logs = db.getExecutionLogs(1000, 0); // Get more logs for export
+    
+    let exportData: string;
+    
+    if (data.format === 'csv') {
+      // Convert to CSV format
+      const headers = ['ID', 'Timestamp', 'Script ID', 'Script Name', 'Status', 'Duration', 'Exit Code', 'Output', 'Error'];
+      const csvRows = [headers.join(',')];
+      
+      for (const log of logs) {
+        const row = [
+          log.id,
+          new Date(log.timestamp).toISOString(),
+          log.script_id,
+          `"${log.script_name.replace(/"/g, '""')}"`,
+          log.status,
+          log.duration || '',
+          log.exit_code || '',
+          `"${(log.output || '').replace(/"/g, '""').substring(0, 100)}"`,
+          `"${(log.error || '').replace(/"/g, '""').substring(0, 100)}"`
+        ];
+        csvRows.push(row.join(','));
+      }
+      
+      exportData = csvRows.join('\n');
+    } else {
+      // JSON format
+      exportData = JSON.stringify(logs, null, 2);
+    }
+
+    mainLogger.info('Logs exported', {
+      format: data.format,
+      logCount: logs.length,
+      dataSize: exportData.length
+    });
+
+    return exportData;
+  });
+};
 
 console.log('First Aid Kit Lite main process initialized');
 console.log('Protocol handlers registered for: first-aid-kit://, fak://');
