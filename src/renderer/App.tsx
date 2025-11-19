@@ -4,52 +4,16 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 // Import types from preload script
 import type { SystemInfo } from '../preload/preload';
 
-// Import ShadCN components
+// Import Pages
+import { Scripts as ScriptsPage } from './pages/Scripts';
+import { SettingsPage } from './pages/SettingsPage';
+import { LogsPage } from './pages/LogsPage';
+import { AppLayout } from './components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { ScriptExecutionProvider } from '@/hooks/useScriptExecution';
+import { SettingsProvider } from '@/hooks/useSettings';
 
-// Components (these will be implemented in Phase 4)
-// import { AppLayout } from './components/layout/AppLayout';
-// import { Dashboard } from './pages/Dashboard';
-// import { Scripts } from './pages/Scripts';
-// import { Settings } from './pages/Settings';
-// import { Logs } from './pages/Logs';
-
-// Temporary placeholder components for initial setup
-const PlaceholderLayout: React.FC<{ children: React.ReactNode; title: string }> = ({ children, title }) => (
-  <div className="min-h-screen bg-background">
-    <header className="bg-white shadow-sm border-b">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-4">
-          <div className="flex items-center">
-            <h1 className="text-2xl font-bold text-gray-900">First Aid Kit Lite</h1>
-            <span className="ml-3 px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-              v0.1.0-alpha
-            </span>
-          </div>
-          <nav className="flex space-x-2">
-            <Button variant="ghost" size="sm">
-              Dashboard
-            </Button>
-            <Button variant="ghost" size="sm">
-              Scripts
-            </Button>
-            <Button variant="ghost" size="sm">
-              Settings
-            </Button>
-            <Button variant="ghost" size="sm">
-              Logs
-            </Button>
-          </nav>
-        </div>
-      </div>
-    </header>
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h2 className="text-3xl font-bold text-gray-900 mb-6">{title}</h2>
-      {children}
-    </main>
-  </div>
-);
-
+// Dashboard Page Component
 const Dashboard: React.FC = () => {
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,18 +41,18 @@ const Dashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <PlaceholderLayout title="Dashboard">
+      <AppLayout>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <span className="ml-3 text-gray-600">Loading system information...</span>
         </div>
-      </PlaceholderLayout>
+      </AppLayout>
     );
   }
 
   if (error) {
     return (
-      <PlaceholderLayout title="Dashboard">
+      <AppLayout>
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -104,12 +68,12 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      </PlaceholderLayout>
+      </AppLayout>
     );
   }
 
   return (
-    <PlaceholderLayout title="Dashboard">
+    <AppLayout>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* System Information Card */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -231,59 +195,9 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       </div>
-    </PlaceholderLayout>
+    </AppLayout>
   );
 };
-
-const Scripts: React.FC = () => (
-  <PlaceholderLayout title="Scripts">
-    <div className="bg-white shadow rounded-lg p-6">
-      <p className="text-gray-600 mb-4">
-        PowerShell script management interface will be implemented in Phase 5.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {[
-          { name: 'Clear Temp Files', risk: 'low', description: 'Remove temporary system files' },
-          { name: 'Flush DNS', risk: 'low', description: 'Clear DNS resolver cache' },
-          { name: 'Restart Explorer', risk: 'medium', description: 'Restart Windows Explorer process' },
-          { name: 'Update Drivers', risk: 'medium', description: 'Check for driver updates' },
-          { name: 'Clean Prefetch', risk: 'low', description: 'Clear prefetch data' },
-          { name: 'Reset Network', risk: 'high', description: 'Reset network configuration' },
-          { name: 'Optimize Drives', risk: 'low', description: 'Run drive optimization' },
-        ].map((script) => (
-          <div key={script.name} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-medium text-gray-900">{script.name}</h3>
-              <span className={`px-2 py-1 text-xs font-medium rounded-full risk-${script.risk}`}>
-                {script.risk.toUpperCase()}
-              </span>
-            </div>
-            <p className="text-sm text-gray-600 mb-3">{script.description}</p>
-            <Button variant="secondary" size="sm" className="w-full" disabled>
-              Coming Soon
-            </Button>
-          </div>
-        ))}
-      </div>
-    </div>
-  </PlaceholderLayout>
-);
-
-const Settings: React.FC = () => (
-  <PlaceholderLayout title="Settings">
-    <div className="bg-white shadow rounded-lg p-6">
-      <p className="text-gray-600">Settings management interface will be implemented in Phase 2.</p>
-    </div>
-  </PlaceholderLayout>
-);
-
-const Logs: React.FC = () => (
-  <PlaceholderLayout title="Execution Logs">
-    <div className="bg-white shadow rounded-lg p-6">
-      <p className="text-gray-600">Execution logs interface will be implemented in Phase 2.</p>
-    </div>
-  </PlaceholderLayout>
-);
 
 // Main App component
 export const App: React.FC = () => {
@@ -332,15 +246,19 @@ export const App: React.FC = () => {
   }
 
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-50">
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/scripts" element={<Scripts />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/logs" element={<Logs />} />
-        </Routes>
-      </div>
-    </Router>
+    <SettingsProvider>
+      <ScriptExecutionProvider>
+        <Router>
+          <div className="min-h-screen bg-gray-50">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/scripts" element={<ScriptsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/logs" element={<LogsPage />} />
+            </Routes>
+          </div>
+        </Router>
+      </ScriptExecutionProvider>
+    </SettingsProvider>
   );
 };

@@ -68,14 +68,15 @@ class ScriptRegistryService {
   private scriptsDirectory: string;
   private initialized = false;
   private discoveryConfig: ScriptDiscoveryConfig;
+  private initPromise: Promise<void>;
 
   constructor() {
     this.scriptsDirectory = join(app.getPath('userData'), 'scripts');
-    
+
     this.discoveryConfig = {
       scriptDirectories: [
         this.scriptsDirectory,
-        join(__dirname, '../../../scripts'), // Bundled scripts
+        join(__dirname, '../../scripts'), // Bundled scripts (dist/main -> FAKL root)
       ],
       allowedExtensions: ['.ps1', '.psm1'],
       maxScriptSize: 10 * 1024 * 1024, // 10MB max
@@ -84,7 +85,7 @@ class ScriptRegistryService {
       scanSubdirectories: true,
     };
 
-    this.initialize();
+    this.initPromise = this.initialize();
   }
 
   private async initialize(): Promise<void> {
@@ -488,6 +489,10 @@ class ScriptRegistryService {
 
   public isInitialized(): boolean {
     return this.initialized;
+  }
+
+  public async waitForInitialization(): Promise<void> {
+    await this.initPromise;
   }
 
   public getScriptsDirectory(): string {

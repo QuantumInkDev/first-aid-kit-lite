@@ -1,0 +1,14 @@
+{
+  "id": "clean-prefetch",
+  "name": "Clean Prefetch Data",
+  "description": "Clear prefetch data to improve system performance",
+  "version": "1.0.0",
+  "author": "First Aid Kit Lite",
+  "category": "Cleanup",
+  "riskLevel": "low",
+  "requiredPermissions": ["Read", "Write", "Delete"],
+  "estimatedDuration": 4000,
+  "tags": ["cleanup", "prefetch", "performance", "maintenance"],
+  "compatibleOS": ["Windows 10", "Windows 11"],
+  "requiresElevation": false
+}

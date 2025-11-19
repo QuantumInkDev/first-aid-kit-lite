@@ -1,0 +1,14 @@
+{
+  "id": "flush-dns",
+  "name": "Flush DNS Cache",
+  "description": "Clear DNS resolver cache to fix network issues",
+  "version": "1.0.0",
+  "author": "First Aid Kit Lite",
+  "category": "Network",
+  "riskLevel": "low",
+  "requiredPermissions": ["Administrator"],
+  "estimatedDuration": 2000,
+  "tags": ["network", "dns", "troubleshooting", "cache"],
+  "compatibleOS": ["Windows 10", "Windows 11"],
+  "requiresElevation": true
+}

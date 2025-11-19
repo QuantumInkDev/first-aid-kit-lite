@@ -1,0 +1,14 @@
+{
+  "id": "restart-explorer",
+  "name": "Restart Windows Explorer",
+  "description": "Restart the Windows Explorer process to fix taskbar and shell issues",
+  "version": "1.0.0",
+  "author": "First Aid Kit Lite",
+  "category": "System",
+  "riskLevel": "medium",
+  "requiredPermissions": ["Administrator"],
+  "estimatedDuration": 3000,
+  "tags": ["system", "explorer", "taskbar", "shell", "troubleshooting"],
+  "compatibleOS": ["Windows 10", "Windows 11"],
+  "requiresElevation": true
+}

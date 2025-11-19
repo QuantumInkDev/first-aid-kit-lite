@@ -1,0 +1,14 @@
+{
+  "id": "clear-temp",
+  "name": "Clear Temporary Files",
+  "description": "Remove temporary system files to free up disk space",
+  "version": "1.0.0",
+  "author": "First Aid Kit Lite",
+  "category": "Cleanup",
+  "riskLevel": "low",
+  "requiredPermissions": ["Read", "Write", "Delete"],
+  "estimatedDuration": 5000,
+  "tags": ["cleanup", "disk-space", "temp-files", "maintenance"],
+  "compatibleOS": ["Windows 10", "Windows 11"],
+  "requiresElevation": false
+}
