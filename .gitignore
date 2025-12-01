@@ -170,3 +170,6 @@ ehthumbs_vista.db
 
 # yarn lock files (if using npm)
 # yarn.locknul
+
+# Windows device name artifacts
+nul
