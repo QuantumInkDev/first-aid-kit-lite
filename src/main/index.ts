@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron';
+import { app, BrowserWindow, protocol, Menu, Notification } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync } from 'fs';
 
@@ -163,6 +163,8 @@ const createWindow = (): void => {
   // Create the browser window with security-first configuration
   mainWindow = new BrowserWindow({
     ...windowOptions,
+    icon: join(__dirname, '../../src/assets/fakl.ico'),
+    autoHideMenuBar: true,
     webPreferences: {
       // Security: Enable context isolation for production security
       contextIsolation: true,
@@ -181,6 +183,33 @@ const createWindow = (): void => {
       // Security: Content Security Policy handled in HTML
     },
   });
+
+  // Set up minimal menu with keyboard shortcuts only
+  const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload', accelerator: 'CmdOrCtrl+R' },
+        { role: 'forceReload', accelerator: 'CmdOrCtrl+Shift+R' },
+        { role: 'toggleDevTools', accelerator: 'CmdOrCtrl+Shift+I' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'close' }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
 
   // Load the index.html of the app
   if (isDevelopment) {
@@ -288,23 +317,26 @@ const handleProtocolUrl = (url: string): void => {
 // App event handlers
 app.whenReady().then(async () => {
   // Install DevTools extensions in development
+  // TEMPORARILY DISABLED - Causing segfaults
+  /*
   if (isDevelopment) {
     try {
       const installExtension = (await import('electron-devtools-installer')).default;
       const { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS } = await import('electron-devtools-installer');
-      
+
       console.log('🛠️ Installing DevTools extensions...');
-      
+
       await installExtension([REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS], {
-        loadExtensionOptions: { allowFileAccess: true },
+        loadExtensionOptions: { allowFileAccess: true},
         forceDownload: false,
       });
-      
+
       console.log('✅ DevTools extensions installed successfully');
     } catch (error) {
       console.warn('⚠️ Failed to install DevTools extensions:', error);
     }
   }
+  */
 
   createWindow();
 
@@ -397,20 +429,28 @@ const mainLogger = createServiceLogger('main-process');
 const initializeServices = async (): Promise<void> => {
   try {
     mainLogger.info('Initializing core services...');
-    
-    // Initialize database service
-    const db = getDatabaseService();
-    const dbHealth = db.healthCheck();
-    if (dbHealth.status !== 'healthy') {
-      throw new Error(`Database unhealthy: ${dbHealth.details}`);
+
+    // Initialize database service (optional in development mode)
+    try {
+      const db = getDatabaseService();
+      const dbHealth = db.healthCheck();
+      if (dbHealth.status !== 'healthy') {
+        throw new Error(`Database unhealthy: ${dbHealth.details}`);
+      }
+      mainLogger.info('Database service initialized successfully');
+    } catch (dbError) {
+      if (isDevelopment) {
+        mainLogger.warn('Database service unavailable in development mode - continuing without it', {
+          error: (dbError as Error).message
+        });
+      } else {
+        throw dbError;
+      }
     }
-    mainLogger.info('Database service initialized successfully');
 
     // Initialize script registry service
     const scriptRegistry = getScriptRegistryService();
-    if (!scriptRegistry.isInitialized()) {
-      throw new Error('Script registry failed to initialize');
-    }
+    await scriptRegistry.waitForInitialization();
     mainLogger.info('Script registry service initialized successfully');
 
     // Initialize PowerShell executor service
@@ -525,7 +565,7 @@ const setupIpcHandlers = (): void => {
   createValidatedIpcHandler('script:execute', async (data: { scriptId: string; parameters?: Record<string, any> }) => {
     const scriptRegistry = getScriptRegistryService();
     const psExecutor = getPowerShellExecutorService();
-    
+
     // Get script definition
     const scriptDef = scriptRegistry.getScript(data.scriptId);
     if (!scriptDef) {
@@ -534,8 +574,8 @@ const setupIpcHandlers = (): void => {
 
     // Validate script before execution
     const validationResult = await ScriptValidatorService.validateScript(scriptDef);
-    
-    // Create execution request
+
+    // Create execution request with callbacks for real-time updates
     const executionRequest = {
       scriptId: data.scriptId,
       scriptDefinition: scriptDef,
@@ -545,13 +585,90 @@ const setupIpcHandlers = (): void => {
       source: 'manual' as const
     };
 
-    // Execute script
+    // Execute script and get the execution ID immediately
     const executionId = await psExecutor.executeScript(executionRequest);
-    
+
+    // Send initial execution started event
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('script:execution:update', {
+        executionId,
+        scriptId: data.scriptId,
+        status: 'running',
+        progress: 0
+      });
+    }
+
     mainLogger.info('Script execution initiated', {
       scriptId: data.scriptId,
       executionId,
       hasParameters: !!data.parameters
+    });
+
+    // Set up polling to check execution status and send updates
+    const updateInterval = setInterval(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        clearInterval(updateInterval);
+        return;
+      }
+
+      const execution = (psExecutor as any).activeExecutions?.get(executionId);
+      if (!execution) {
+        // Execution completed or not found, stop polling
+        clearInterval(updateInterval);
+        return;
+      }
+
+      // Send progress update (we'll estimate progress based on elapsed time)
+      const elapsed = Date.now() - execution.startTime;
+      const estimated = scriptDef.estimatedDuration || 5000;
+      const progress = Math.min(Math.floor((elapsed / estimated) * 90), 90); // Cap at 90% until complete
+
+      mainWindow.webContents.send('script:execution:update', {
+        executionId,
+        scriptId: data.scriptId,
+        status: 'running',
+        progress
+      });
+    }, 500);
+
+    // Set up real-time callbacks for script completion with actual output
+    psExecutor.setExecutionCallbacks(executionId, {
+      onProgress: (output: string) => {
+        // Stream output to renderer in real-time
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('script:execution:update', {
+            executionId,
+            scriptId: data.scriptId,
+            status: 'running',
+            output: output
+          });
+        }
+      },
+      onComplete: (result) => {
+        // Stop polling
+        clearInterval(updateInterval);
+
+        // Send actual completion result with real output
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('script:execution:update', {
+            executionId,
+            scriptId: data.scriptId,
+            status: result.success ? 'success' : 'error',
+            progress: 100,
+            output: result.output || `Script "${scriptDef.name}" completed`,
+            error: result.error,
+            duration: result.duration,
+            exitCode: result.exitCode
+          });
+        }
+
+        mainLogger.info('Script execution completed with real output', {
+          executionId,
+          success: result.success,
+          outputLength: result.output?.length || 0,
+          duration: result.duration
+        });
+      }
     });
 
     return { executionId };
@@ -620,6 +737,55 @@ const setupIpcHandlers = (): void => {
     });
 
     return exportData;
+  });
+
+  // Native Windows notification handler
+  createValidatedIpcHandler('notification:show', async (data: { type: string; message: string; options?: any }) => {
+    // Check if notifications are supported
+    if (!Notification.isSupported()) {
+      mainLogger.warn('Native notifications not supported on this platform');
+      return { success: false, reason: 'not_supported' };
+    }
+
+    // Map notification types to appropriate titles
+    const titles: Record<string, string> = {
+      success: 'Tool Completed',
+      error: 'Tool Failed',
+      warning: 'Warning',
+      info: 'First Aid Kit Lite'
+    };
+
+    const title = titles[data.type] || 'First Aid Kit Lite';
+
+    // Create and show native notification
+    const notification = new Notification({
+      title: title,
+      body: data.message,
+      icon: join(__dirname, '../../src/assets/fakl.png'),
+      silent: false,
+      urgency: data.type === 'error' ? 'critical' : 'normal',
+      timeoutType: 'default'
+    });
+
+    // Handle notification click - bring app to focus
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore();
+        }
+        mainWindow.focus();
+      }
+    });
+
+    notification.show();
+
+    mainLogger.debug('Native notification shown', {
+      type: data.type,
+      title,
+      messageLength: data.message.length
+    });
+
+    return { success: true };
   });
 };
 

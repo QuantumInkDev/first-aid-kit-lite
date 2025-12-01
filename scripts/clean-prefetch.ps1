@@ -13,7 +13,6 @@
     Name: clean-prefetch.ps1
     Author: First Aid Kit Lite
     Version: 1.0.0
-    Risk Level: Low
 #>
 
 [CmdletBinding()]

@@ -5,10 +5,7 @@
   "version": "1.0.0",
   "author": "First Aid Kit Lite",
   "category": "Network",
-  "riskLevel": "high",
-  "requiredPermissions": ["Administrator"],
   "estimatedDuration": 15000,
   "tags": ["network", "reset", "troubleshooting", "connectivity", "winsock", "tcp-ip"],
-  "compatibleOS": ["Windows 10", "Windows 11"],
-  "requiresElevation": true
+  "compatibleOS": ["Windows 10", "Windows 11"]
 }

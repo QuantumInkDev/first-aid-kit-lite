@@ -218,7 +218,7 @@ export const LogsPage: React.FC = () => {
                 <label className="text-sm font-medium text-gray-700 mb-2 block">Search</label>
                 <input
                   type="text"
-                  placeholder="Search by script name, ID, output, or error..."
+                  placeholder="Search by tool name, ID, output, or error..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
@@ -254,7 +254,7 @@ export const LogsPage: React.FC = () => {
         <Card>
           <CardHeader>
             <CardTitle>Execution History</CardTitle>
-            <CardDescription>Detailed view of all script executions</CardDescription>
+            <CardDescription>Detailed view of all tool executions</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredExecutions.length === 0 ? (
@@ -263,7 +263,7 @@ export const LogsPage: React.FC = () => {
                 <p className="text-gray-600 mb-2">No execution logs found</p>
                 <p className="text-sm text-gray-500">
                   {executions.length === 0
-                    ? 'Execute a script to see logs here'
+                    ? 'Execute a tool to see logs here'
                     : 'Try adjusting your filters'}
                 </p>
               </div>

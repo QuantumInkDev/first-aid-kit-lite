@@ -11,7 +11,6 @@ export interface ScriptDefinition {
   name: string;
   description: string;
   scriptPath: string;
-  riskLevel: 'low' | 'medium' | 'high';
   parameters?: ScriptParameter[];
   timeout: number;
   category: string;
@@ -19,7 +18,6 @@ export interface ScriptDefinition {
   author?: string;
   tags?: string[];
   estimatedDuration: number;
-  requiredPermissions: string[];
   lastModified: number;
   fileSize: number;
   hash?: string;
@@ -43,14 +41,12 @@ export interface ScriptParameter {
 export interface ScriptMetadata {
   name?: string;
   description?: string;
-  riskLevel?: 'low' | 'medium' | 'high';
   timeout?: number;
   category?: string;
   version?: string;
   author?: string;
   tags?: string[];
   estimatedDuration?: number;
-  requiredPermissions?: string[];
   parameters?: ScriptParameter[];
 }
 
@@ -218,14 +214,12 @@ class ScriptRegistryService {
         name: metadata.name || this.generateDisplayName(scriptPath),
         description: metadata.description || 'No description available',
         scriptPath,
-        riskLevel: metadata.riskLevel || 'medium',
         timeout: metadata.timeout || 30000, // 30 seconds default
         category: metadata.category || 'uncategorized',
         version: metadata.version || '1.0.0',
         author: metadata.author || 'Unknown',
         tags: metadata.tags || [],
         estimatedDuration: metadata.estimatedDuration || 5000, // 5 seconds default
-        requiredPermissions: metadata.requiredPermissions || [],
         parameters: metadata.parameters || [],
         lastModified: stat.mtime.getTime(),
         fileSize: stat.size,
@@ -243,8 +237,7 @@ class ScriptRegistryService {
       logger.debug('Script loaded successfully', {
         scriptId,
         name: scriptDef.name,
-        path: scriptPath,
-        riskLevel: scriptDef.riskLevel
+        path: scriptPath
       });
 
     } catch (error) {
@@ -341,12 +334,6 @@ class ScriptRegistryService {
           case 'description':
             metadata.description = value;
             break;
-          case 'risk':
-          case 'risklevel':
-            if (['low', 'medium', 'high'].includes(value.toLowerCase())) {
-              metadata.riskLevel = value.toLowerCase() as 'low' | 'medium' | 'high';
-            }
-            break;
           case 'timeout':
             const timeout = parseInt(value);
             if (!isNaN(timeout)) metadata.timeout = timeout * 1000; // Convert to ms
@@ -367,10 +354,6 @@ class ScriptRegistryService {
           case 'estimatedduration':
             const duration = parseInt(value);
             if (!isNaN(duration)) metadata.estimatedDuration = duration * 1000; // Convert to ms
-            break;
-          case 'permissions':
-          case 'requiredpermissions':
-            metadata.requiredPermissions = value.split(',').map(perm => perm.trim());
             break;
         }
       }
@@ -402,17 +385,9 @@ class ScriptRegistryService {
       return [];
     }
 
-    return this.getAllScripts().filter(script => 
+    return this.getAllScripts().filter(script =>
       script.category.toLowerCase() === category.toLowerCase()
     );
-  }
-
-  public getScriptsByRiskLevel(riskLevel: 'low' | 'medium' | 'high'): ScriptDefinition[] {
-    if (!this.initialized) {
-      return [];
-    }
-
-    return this.getAllScripts().filter(script => script.riskLevel === riskLevel);
   }
 
   public searchScripts(query: string): ScriptDefinition[] {
@@ -464,24 +439,19 @@ class ScriptRegistryService {
 
   public getRegistryStats(): {
     totalScripts: number;
-    scriptsByRisk: Record<string, number>;
     scriptsByCategory: Record<string, number>;
     lastRefresh: number;
   } {
     const scripts = this.getAllScripts();
-    const scriptsByRisk = { low: 0, medium: 0, high: 0 };
     const scriptsByCategory: Record<string, number> = {};
 
     for (const script of scripts) {
-      scriptsByRisk[script.riskLevel]++;
-      
       const category = script.category;
       scriptsByCategory[category] = (scriptsByCategory[category] || 0) + 1;
     }
 
     return {
       totalScripts: scripts.length,
-      scriptsByRisk,
       scriptsByCategory,
       lastRefresh: Date.now()
     };

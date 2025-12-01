@@ -12,7 +12,6 @@
     Name: clear-temp.ps1
     Author: First Aid Kit Lite
     Version: 1.0.0
-    Risk Level: Low
 #>
 
 [CmdletBinding()]
@@ -79,6 +78,9 @@ function Remove-TempFiles {
         Write-Output "[ERROR] $Description - $_"
     }
 }
+
+# Clean C Temp
+Remove-TempFiles -Path "C:\Temp" -Description "Windows Temp"
 
 # Clean Windows Temp
 Remove-TempFiles -Path "$env:SystemRoot\Temp" -Description "Windows Temp"

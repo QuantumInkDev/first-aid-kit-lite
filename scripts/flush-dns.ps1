@@ -1,4 +1,3 @@
-#Requires -RunAsAdministrator
 #Requires -Version 5.1
 <#
 .SYNOPSIS
@@ -12,8 +11,6 @@
     Name: flush-dns.ps1
     Author: First Aid Kit Lite
     Version: 1.0.0
-    Risk Level: Low
-    Requires: Administrator privileges
 #>
 
 [CmdletBinding()]

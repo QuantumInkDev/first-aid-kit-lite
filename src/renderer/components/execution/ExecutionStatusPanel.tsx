@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useScriptExecution } from '@/hooks/useScriptExecution';
 import { ExecutionStatusBadge } from './ExecutionStatusBadge';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,11 @@ export const ExecutionStatusPanel: React.FC<ExecutionStatusPanelProps> = ({ isOp
   const { activeExecutions, recentExecutions, cancelExecution, clearExecution, clearAllCompleted } =
     useScriptExecution();
   const panelRef = useRef<HTMLDivElement>(null);
+  const [expandedOutput, setExpandedOutput] = useState<string | null>(null);
+
+  const toggleOutputExpanded = (executionId: string) => {
+    setExpandedOutput((prev) => (prev === executionId ? null : executionId));
+  };
 
   // Handle click outside to close
   useEffect(() => {
@@ -144,7 +149,36 @@ export const ExecutionStatusPanel: React.FC<ExecutionStatusPanelProps> = ({ isOp
                     >
                       Cancel
                     </Button>
+                    {execution.output && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleOutputExpanded(execution.id)}
+                        className="text-xs"
+                      >
+                        {expandedOutput === execution.id ? 'Hide Output' : 'View Output'}
+                      </Button>
+                    )}
                   </div>
+
+                  {/* Output Viewer */}
+                  {expandedOutput === execution.id && execution.output && (
+                    <div className="mt-3 rounded-md bg-gray-900 border border-gray-700 overflow-hidden">
+                      <div className="px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                        <span className="text-xs text-gray-400 font-mono">PowerShell Output</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(execution.output || '')}
+                          className="text-gray-400 hover:text-gray-200 text-xs"
+                          title="Copy to clipboard"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="p-3 text-xs text-green-400 font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                        {execution.output}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -193,6 +227,45 @@ export const ExecutionStatusPanel: React.FC<ExecutionStatusPanelProps> = ({ isOp
                       </button>
                     </div>
                   </div>
+
+                  {/* View Output Button */}
+                  {execution.output && (
+                    <div className="mt-2">
+                      <button
+                        onClick={() => toggleOutputExpanded(execution.id)}
+                        className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      >
+                        <svg
+                          className={cn('w-3 h-3 transition-transform', expandedOutput === execution.id && 'rotate-90')}
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                        {expandedOutput === execution.id ? 'Hide Output' : 'View Output'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Output Viewer */}
+                  {expandedOutput === execution.id && execution.output && (
+                    <div className="mt-2 rounded-md bg-gray-900 border border-gray-700 overflow-hidden">
+                      <div className="px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+                        <span className="text-xs text-gray-400 font-mono">PowerShell Output</span>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(execution.output || '')}
+                          className="text-gray-400 hover:text-gray-200 text-xs"
+                          title="Copy to clipboard"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre className="p-3 text-xs text-green-400 font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
+                        {execution.output}
+                      </pre>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

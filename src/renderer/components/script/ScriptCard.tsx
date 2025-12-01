@@ -1,7 +1,5 @@
 import React from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '../common/Card';
-import { RiskBadge } from '../common/Badge';
-import { Button } from '../ui/button';
 import { ExecutionStatusBadge } from '../execution/ExecutionStatusBadge';
 import type { ScriptExecution } from '@/hooks/useScriptExecution';
 
@@ -9,10 +7,8 @@ export interface ScriptCardProps {
   id: string;
   name: string;
   description: string;
-  riskLevel: 'low' | 'medium' | 'high';
   category: string;
   estimatedDuration: number;
-  requiredPermissions: string[];
   executionStatus?: ScriptExecution['status'];
   onExecute: (scriptId: string) => void;
 }
@@ -21,10 +17,8 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
   id,
   name,
   description,
-  riskLevel,
   category,
   estimatedDuration,
-  requiredPermissions,
   executionStatus,
   onExecute,
 }) => {
@@ -45,7 +39,6 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
             </CardTitle>
             <CardDescription>{description}</CardDescription>
           </div>
-          <RiskBadge level={riskLevel} className="ml-4 flex-shrink-0" />
         </div>
       </CardHeader>
 
@@ -84,30 +77,6 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
             </svg>
             <span>Est. {formatDuration(estimatedDuration)}</span>
           </div>
-
-          {requiredPermissions.length > 0 && (
-            <div className="flex items-start text-sm text-gray-600">
-              <svg
-                className="w-4 h-4 mr-2 text-gray-400 flex-shrink-0 mt-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                />
-              </svg>
-              <div className="flex-1">
-                <span className="block font-medium">Permissions:</span>
-                <span className="text-xs text-gray-500">
-                  {requiredPermissions.join(', ')}
-                </span>
-              </div>
-            </div>
-          )}
         </div>
       </CardContent>
 
@@ -116,36 +85,24 @@ export const ScriptCard: React.FC<ScriptCardProps> = ({
           <div className="flex items-center gap-2">
             {executionStatus && <ExecutionStatusBadge status={executionStatus} size="sm" />}
           </div>
-          <Button
-            size="sm"
+          <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               onExecute(id);
             }}
-            className="ml-auto"
             disabled={executionStatus === 'running' || executionStatus === 'pending'}
+            className="ml-auto inline-flex items-center justify-center h-9 px-4 rounded-md text-sm font-medium bg-[#00468b] hover:bg-[#003d79] text-white cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg
-              className="w-4 h-4 mr-1"
-              fill="none"
+              className="w-4 h-4 mr-1.5"
+              fill="currentColor"
               viewBox="0 0 24 24"
-              stroke="currentColor"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
-              />
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
+              <path d="M8 5v14l11-7z" />
             </svg>
-            {executionStatus === 'running' || executionStatus === 'pending' ? 'Running...' : 'Execute'}
-          </Button>
+            {executionStatus === 'running' || executionStatus === 'pending' ? 'Running...' : 'Run'}
+          </button>
         </div>
       </CardFooter>
     </Card>

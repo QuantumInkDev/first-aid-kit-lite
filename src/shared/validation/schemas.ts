@@ -20,11 +20,11 @@ export const SafeStringSchema = z.string()
 // System information validation
 export const SystemInfoSchema = z.object({
   platform: z.enum(['win32', 'darwin', 'linux'], {
-    errorMap: () => ({ message: 'Unsupported platform' })
+    message: 'Unsupported platform'
   }),
   version: z.string().min(1, 'Version required'),
   arch: z.enum(['x64', 'arm64', 'x32'], {
-    errorMap: () => ({ message: 'Unsupported architecture' })
+    message: 'Unsupported architecture'
   }),
   powershellVersion: z.string().min(1, 'PowerShell version required'),
   isElevated: z.boolean()
@@ -34,7 +34,7 @@ export const SystemInfoSchema = z.object({
 export const ScriptParameterSchema = z.object({
   name: SafeStringSchema.max(100, 'Parameter name too long'),
   type: z.enum(['string', 'number', 'boolean', 'select'], {
-    errorMap: () => ({ message: 'Invalid parameter type' })
+    message: 'Invalid parameter type'
   }),
   required: z.boolean(),
   description: SafeStringSchema.max(500, 'Description too long'),
@@ -47,9 +47,6 @@ export const ScriptDefinitionSchema = z.object({
   name: SafeStringSchema.max(200, 'Script name too long'),
   description: SafeStringSchema.max(1000, 'Description too long'),
   scriptPath: SafeStringSchema.max(500, 'Script path too long'),
-  riskLevel: z.enum(['low', 'medium', 'high'], {
-    errorMap: () => ({ message: 'Invalid risk level' })
-  }),
   timeout: z.number()
     .int('Timeout must be an integer')
     .min(1000, 'Timeout must be at least 1 second')
@@ -62,7 +59,6 @@ export const ScriptDefinitionSchema = z.object({
     .int('Duration must be an integer')
     .min(0, 'Duration cannot be negative')
     .max(3600000, 'Duration too long (max 1 hour)'), // milliseconds
-  requiredPermissions: z.array(SafeStringSchema.max(100)).max(10, 'Too many permissions'),
   lastModified: z.number().int().min(0, 'Last modified timestamp must be non-negative'),
   fileSize: z.number().int().min(0, 'File size must be non-negative'),
   parameters: z.array(ScriptParameterSchema).optional(),
@@ -120,7 +116,7 @@ export const LogFiltersSchema = z.object({
 
 export const ExportLogsRequestSchema = z.object({
   format: z.enum(['json', 'csv'], {
-    errorMap: () => ({ message: 'Invalid export format' })
+    message: 'Invalid export format'
   }),
   filters: LogFiltersSchema.optional()
 });
@@ -129,14 +125,14 @@ export const ExportLogsRequestSchema = z.object({
 export const AppSettingsSchema = z.object({
   confirmationRequired: z.boolean(),
   notificationLevel: z.enum(['all', 'errors', 'none'], {
-    errorMap: () => ({ message: 'Invalid notification level' })
+    message: 'Invalid notification level'
   }),
   logRetentionDays: z.number()
     .int('Log retention must be an integer')
     .min(1, 'Log retention must be at least 1 day')
     .max(365, 'Log retention cannot exceed 365 days'),
   theme: z.enum(['light', 'dark', 'system'], {
-    errorMap: () => ({ message: 'Invalid theme' })
+    message: 'Invalid theme'
   }),
   maxConcurrentExecutions: z.number()
     .int('Max concurrent executions must be an integer')
@@ -152,7 +148,7 @@ export const AppSettingsSchema = z.object({
 // Notification validation
 export const NotificationSchema = z.object({
   type: z.enum(['success', 'error', 'warning', 'info'], {
-    errorMap: () => ({ message: 'Invalid notification type' })
+    message: 'Invalid notification type'
   }),
   message: SafeStringSchema.max(500, 'Notification message too long'),
   options: z.object({
@@ -213,12 +209,9 @@ export const AuditLogSchema = z.object({
   resource: SafeStringSchema.max(200, 'Resource identifier too long'),
   details: z.string().max(2000, 'Details too long').optional(),
   ipAddress: z.string()
-    .ip({ message: 'Invalid IP address format' })
+    .regex(/^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$|^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\.){3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))$/, 'Invalid IP address format')
     .optional(),
-  userAgent: z.string().max(500, 'User agent too long').optional(),
-  riskLevel: z.enum(['low', 'medium', 'high'], {
-    errorMap: () => ({ message: 'Invalid risk level' })
-  })
+  userAgent: z.string().max(500, 'User agent too long').optional()
 });
 
 // IPC message validation wrapper

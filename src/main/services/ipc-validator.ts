@@ -22,8 +22,10 @@ interface RateLimitConfig {
 }
 
 // Default rate limiting configuration
+// Note: In development mode, React StrictMode causes double-renders, so limits are higher
+const isDev = process.env.NODE_ENV === 'development';
 const DEFAULT_RATE_LIMITS: Record<string, RateLimitConfig> = {
-  'system:get-info': { windowMs: 60000, maxRequests: 10 },
+  'system:get-info': { windowMs: 60000, maxRequests: isDev ? 100 : 30 },
   'script:execute': { windowMs: 60000, maxRequests: 5 },
   'script:cancel': { windowMs: 60000, maxRequests: 10 },
   'script:get-all': { windowMs: 30000, maxRequests: 20 },
@@ -221,7 +223,7 @@ class IpcValidationService {
           channel,
           requestId,
           duration: Date.now() - startTime,
-          dataSize: JSON.stringify(data).length
+          dataSize: JSON.stringify(data || null).length
         });
 
         return { success: true, data: dataValidation.data as T };
@@ -283,7 +285,7 @@ class IpcValidationService {
           channel,
           requestId,
           clientId: event.sender.id,
-          dataSize: JSON.stringify(validation.data).length
+          dataSize: JSON.stringify(validation.data || null).length
         });
 
         // Execute the handler with validated data

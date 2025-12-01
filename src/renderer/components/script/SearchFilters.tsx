@@ -6,8 +6,6 @@ export interface SearchFiltersProps {
   onSearchChange: (query: string) => void;
   selectedCategory: string;
   onCategoryChange: (category: string) => void;
-  selectedRiskLevel: string;
-  onRiskLevelChange: (riskLevel: string) => void;
   categories: string[];
 }
 
@@ -16,13 +14,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   onSearchChange,
   selectedCategory,
   onCategoryChange,
-  selectedRiskLevel,
-  onRiskLevelChange,
   categories,
 }) => {
   return (
     <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6 mb-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Search Input */}
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -72,28 +68,10 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
             ))}
           </select>
         </div>
-
-        {/* Risk Level Filter */}
-        <div>
-          <select
-            value={selectedRiskLevel}
-            onChange={(e) => onRiskLevelChange(e.target.value)}
-            className={cn(
-              'block w-full px-3 py-2 border border-gray-300 rounded-md',
-              'focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent',
-              'text-sm bg-white'
-            )}
-          >
-            <option value="">All Risk Levels</option>
-            <option value="low">Low Risk</option>
-            <option value="medium">Medium Risk</option>
-            <option value="high">High Risk</option>
-          </select>
-        </div>
       </div>
 
       {/* Active Filters Display */}
-      {(searchQuery || selectedCategory || selectedRiskLevel) && (
+      {(searchQuery || selectedCategory) && (
         <div className="mt-4 flex items-center flex-wrap gap-2">
           <span className="text-sm text-gray-600">Active filters:</span>
           {searchQuery && (
@@ -118,22 +96,10 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
               </button>
             </span>
           )}
-          {selectedRiskLevel && (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800">
-              Risk: {selectedRiskLevel}
-              <button
-                onClick={() => onRiskLevelChange('')}
-                className="ml-2 hover:text-blue-900"
-              >
-                ×
-              </button>
-            </span>
-          )}
           <button
             onClick={() => {
               onSearchChange('');
               onCategoryChange('');
-              onRiskLevelChange('');
             }}
             className="text-sm text-blue-600 hover:text-blue-800 font-medium"
           >

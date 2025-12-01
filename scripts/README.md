@@ -19,29 +19,25 @@ Each script consists of two files:
   "version": "1.0.0",
   "author": "First Aid Kit Lite",
   "category": "Category Name",
-  "riskLevel": "low|medium|high",
-  "requiredPermissions": ["Administrator", "Read", "Write"],
   "estimatedDuration": 5000,
   "tags": ["tag1", "tag2"],
-  "compatibleOS": ["Windows 10", "Windows 11"],
-  "requiresElevation": true|false
+  "compatibleOS": ["Windows 10", "Windows 11"]
 }
 ```
 
 ## Available Scripts
 
-1. **clear-temp.ps1** - Clear Temporary Files (Low Risk)
-2. **flush-dns.ps1** - Flush DNS Cache (Low Risk)
-3. **restart-explorer.ps1** - Restart Windows Explorer (Medium Risk)
-4. **clean-prefetch.ps1** - Clean Prefetch Data (Low Risk)
-5. **reset-network.ps1** - Reset Network Configuration (High Risk)
-6. **optimize-drives.ps1** - Optimize Drives (Low Risk)
-7. **clear-event-logs.ps1** - Clear Event Logs (Medium Risk)
+1. **clear-temp.ps1** - Clear Temporary Files
+2. **flush-dns.ps1** - Flush DNS Cache
+3. **restart-explorer.ps1** - Restart Windows Explorer
+4. **clean-prefetch.ps1** - Clean Prefetch Data
+5. **reset-network.ps1** - Reset Network Configuration
+6. **optimize-drives.ps1** - Optimize Drives
+7. **clear-event-logs.ps1** - Clear Event Logs
 
 ## Security Notes
 
 - All scripts are validated before execution
-- High-risk scripts require explicit user confirmation
 - Scripts run in isolated PowerShell processes
 - Execution timeout: 5 minutes (configurable)
 - All executions are logged for audit purposes

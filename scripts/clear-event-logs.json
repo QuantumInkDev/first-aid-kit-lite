@@ -5,10 +5,7 @@
   "version": "1.0.0",
   "author": "First Aid Kit Lite",
   "category": "Cleanup",
-  "riskLevel": "medium",
-  "requiredPermissions": ["Administrator"],
   "estimatedDuration": 5000,
   "tags": ["cleanup", "event-logs", "system", "maintenance", "troubleshooting"],
-  "compatibleOS": ["Windows 10", "Windows 11"],
-  "requiresElevation": true
+  "compatibleOS": ["Windows 10", "Windows 11"]
 }

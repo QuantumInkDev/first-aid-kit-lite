@@ -1,4 +1,3 @@
-#Requires -RunAsAdministrator
 #Requires -Version 5.1
 <#
 .SYNOPSIS
@@ -15,8 +14,6 @@
     Name: clear-event-logs.ps1
     Author: First Aid Kit Lite
     Version: 1.0.0
-    Risk Level: Medium
-    Requires: Administrator privileges
 #>
 
 [CmdletBinding()]

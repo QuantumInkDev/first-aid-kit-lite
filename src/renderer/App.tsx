@@ -1,86 +1,27 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
-// Import types from preload script
-import type { SystemInfo } from '../preload/preload';
-
 // Import Pages
 import { Scripts as ScriptsPage } from './pages/Scripts';
-import { SettingsPage } from './pages/SettingsPage';
 import { LogsPage } from './pages/LogsPage';
+import { AboutPage } from './pages/AboutPage';
 import { AppLayout } from './components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
+import { Toaster } from '@/components/ui/toaster';
 import { ScriptExecutionProvider } from '@/hooks/useScriptExecution';
 import { SettingsProvider } from '@/hooks/useSettings';
 
 // Dashboard Page Component
 const Dashboard: React.FC = () => {
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const loadSystemInfo = async () => {
-      try {
-        if (window.electronAPI) {
-          const info = await window.electronAPI.getSystemInfo();
-          setSystemInfo(info);
-        } else {
-          throw new Error('Electron API not available');
-        }
-      } catch (err) {
-        console.error('Failed to load system info:', err);
-        setError('Failed to load system information');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSystemInfo();
-  }, []);
-
-  if (loading) {
-    return (
-      <AppLayout>
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">Loading system information...</span>
-        </div>
-      </AppLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <AppLayout>
-        <div className="bg-red-50 border border-red-200 rounded-md p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <div className="mt-2 text-sm text-red-700">
-                <p>{error}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </AppLayout>
-    );
-  }
-
   return (
     <AppLayout>
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* System Information Card */}
+        {/* System Status Card */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="px-4 py-5 sm:p-6">
             <div className="flex items-center">
               <div className="flex-shrink-0">
-                <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -89,28 +30,11 @@ const Dashboard: React.FC = () => {
                 <dd className="mt-1 text-3xl font-semibold text-gray-900">Ready</dd>
               </div>
             </div>
-            {systemInfo && (
-              <div className="mt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Platform:</span>
-                  <span className="font-medium">{systemInfo.platform} {systemInfo.arch}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Version:</span>
-                  <span className="font-medium">{systemInfo.version}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">PowerShell:</span>
-                  <span className="font-medium">{systemInfo.powershellVersion}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Elevated:</span>
-                  <span className={`font-medium ${systemInfo.isElevated ? 'text-green-600' : 'text-yellow-600'}`}>
-                    {systemInfo.isElevated ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-            )}
+            <div className="mt-4">
+              <p className="text-sm text-gray-600">
+                First Aid Kit Lite is ready to execute maintenance tools.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -125,7 +49,7 @@ const Dashboard: React.FC = () => {
               </div>
               <div className="ml-4">
                 <dt className="text-sm font-medium text-gray-500 truncate">Quick Actions</dt>
-                <dd className="mt-1 text-lg font-semibold text-gray-900">7 Available Scripts</dd>
+                <dd className="mt-1 text-lg font-semibold text-gray-900">7 Available Tools</dd>
               </div>
             </div>
             <div className="space-y-2">
@@ -139,7 +63,7 @@ const Dashboard: React.FC = () => {
                 🔄 Restart Explorer
               </Button>
               <Button variant="outline" className="w-full justify-start text-sm">
-                ⚙️ More Scripts →
+                ⚙️ More Tools →
               </Button>
             </div>
           </div>
@@ -148,47 +72,66 @@ const Dashboard: React.FC = () => {
         {/* Development Status Card */}
         <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-2">
           <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center mb-4">
-              <div className="flex-shrink-0">
-                <svg className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div className="ml-4">
+                  <dt className="text-sm font-medium text-gray-500 truncate">Development Status</dt>
+                  <dd className="mt-1 text-lg font-semibold text-gray-900">Phase 8: Protocol Integration (96% Complete)</dd>
+                </div>
               </div>
-              <div className="ml-4">
-                <dt className="text-sm font-medium text-gray-500 truncate">Development Status</dt>
-                <dd className="mt-1 text-lg font-semibold text-gray-900">Phase 1: Foundation Complete</dd>
+              <div className="text-right">
+                <span className="text-2xl font-bold text-green-600">96%</span>
+                <p className="text-xs text-gray-500">Overall Progress</p>
+              </div>
+            </div>
+            <div className="mb-4">
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="bg-green-600 h-2 rounded-full" style={{ width: '96%' }}></div>
               </div>
             </div>
             <div className="bg-gray-50 rounded-lg p-4">
               <div className="space-y-2 text-sm">
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  <span>✅ Project planning and documentation complete</span>
+                  <span>Phase 1: Project Foundation</span>
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  <span>✅ Git repository initialized with proper structure</span>
+                  <span>Phase 2: Core Infrastructure</span>
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  <span>✅ Electron project with React TypeScript configured</span>
+                  <span>Phase 3: Tool Integration</span>
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                  <span>✅ Security-first architecture implemented</span>
+                  <span>Phase 4: User Interface Development</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span>Phase 5: Tool Implementation</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span>Phase 6: UI Polish & Branding</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span>Phase 7: Notification System</span>
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                  <span>🔄 Basic UI framework established (current)</span>
+                  <span>Phase 8: Protocol Integration (current)</span>
                 </div>
                 <div className="flex items-center">
                   <span className="w-2 h-2 bg-gray-300 rounded-full mr-2"></span>
-                  <span>⏳ Protocol handlers (next: Phase 2)</span>
-                </div>
-                <div className="flex items-center">
-                  <span className="w-2 h-2 bg-gray-300 rounded-full mr-2"></span>
-                  <span>⏳ PowerShell integration (Phase 3)</span>
+                  <span>Phase 9-10: Testing & Deployment</span>
                 </div>
               </div>
             </div>
@@ -253,10 +196,11 @@ export const App: React.FC = () => {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/scripts" element={<ScriptsPage />} />
-              <Route path="/settings" element={<SettingsPage />} />
               <Route path="/logs" element={<LogsPage />} />
+              <Route path="/about" element={<AboutPage />} />
             </Routes>
           </div>
+          <Toaster />
         </Router>
       </ScriptExecutionProvider>
     </SettingsProvider>

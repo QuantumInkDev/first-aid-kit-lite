@@ -32,22 +32,3 @@ export const Badge: React.FC<BadgeProps> = ({
     </span>
   );
 };
-
-export interface RiskBadgeProps {
-  level: 'low' | 'medium' | 'high';
-  className?: string;
-}
-
-export const RiskBadge: React.FC<RiskBadgeProps> = ({ level, className }) => {
-  const variantMap = {
-    low: 'success' as const,
-    medium: 'warning' as const,
-    high: 'danger' as const,
-  };
-
-  return (
-    <Badge variant={variantMap[level]} className={className}>
-      {level.toUpperCase()}
-    </Badge>
-  );
-};
