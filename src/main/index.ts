@@ -297,9 +297,9 @@ const createWindow = (): void => {
 };
 
 // Protocol handler for first-aid-kit:// and fak:// URLs
-const handleProtocolUrl = (url: string): void => {
+const handleProtocolUrl = async (url: string): Promise<void> => {
   mainLogger.info('Protocol URL received:', { url });
-  
+
   try {
     // Parse the protocol URL
     // Format: first-aid-kit://run/<script-id>?param1=value1&param2=value2
@@ -308,15 +308,15 @@ const handleProtocolUrl = (url: string): void => {
     const protocol = parsedUrl.protocol.replace(':', ''); // 'first-aid-kit' or 'fak'
     const command = parsedUrl.hostname; // 'run', 'help', etc.
     const scriptId = parsedUrl.pathname.replace(/^\//, ''); // Remove leading slash
-    
+
     // Parse query parameters
     const parameters: Record<string, string> = {};
     parsedUrl.searchParams.forEach((value, key) => {
       parameters[key] = value;
     });
-    
+
     mainLogger.info('Parsed protocol request:', { protocol, command, scriptId, parameters });
-    
+
     // Validate command
     if (command !== 'run') {
       mainLogger.warn('Unknown protocol command:', { command });
@@ -324,17 +324,28 @@ const handleProtocolUrl = (url: string): void => {
       showMainWindow();
       return;
     }
-    
+
     // Validate script ID
     if (!scriptId) {
       mainLogger.warn('No script ID provided in protocol URL');
       showMainWindow();
       return;
     }
-    
+
+    // Refresh script registry to pick up any newly added scripts
+    // This ensures new scripts dropped into the folder are immediately available
+    try {
+      const scriptRegistry = getScriptRegistryService();
+      await scriptRegistry.refreshRegistry();
+      mainLogger.info('Script registry refreshed for protocol request');
+    } catch (refreshError) {
+      mainLogger.warn('Failed to refresh script registry:', { error: refreshError });
+      // Continue anyway - existing scripts will still work
+    }
+
     // Show the window first
     showMainWindow();
-    
+
     // Send protocol request to renderer after a short delay to ensure window is ready
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -347,7 +358,7 @@ const handleProtocolUrl = (url: string): void => {
         mainLogger.info('Protocol request sent to renderer:', { scriptId });
       }
     }, 500);
-    
+
   } catch (error) {
     mainLogger.error('Failed to parse protocol URL:', { url, error });
     showMainWindow();
