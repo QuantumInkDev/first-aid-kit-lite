@@ -48,6 +48,16 @@ const rendererUrl = isDevelopment
 console.log('🔧 Main process: Preload path (resolve):', preloadPath);
 console.log('🔧 Main process: __dirname:', __dirname);
 
+// Helper function to get asset paths (works in both dev and production)
+const getAssetPath = (assetName: string): string => {
+  if (app.isPackaged) {
+    // Production: assets are in resources/assets
+    return join(process.resourcesPath, 'assets', assetName);
+  }
+  // Development: assets are in src/assets
+  return join(__dirname, '../../src/assets', assetName);
+};
+
 // Check if preload file exists
 import { existsSync } from 'fs';
 if (existsSync(preloadPath)) {
@@ -138,7 +148,7 @@ const performGracefulShutdown = async (): Promise<boolean> => {
 
 // Create system tray
 const createTray = (): void => {
-  const iconPath = join(__dirname, '../../src/assets/fakl.ico');
+  const iconPath = getAssetPath('fakl.ico');
   const icon = nativeImage.createFromPath(iconPath);
 
   tray = new Tray(icon);
@@ -219,7 +229,7 @@ const createWindow = (): void => {
   // Create the browser window with security-first configuration
   mainWindow = new BrowserWindow({
     ...windowOptions,
-    icon: join(__dirname, '../../src/assets/fakl.ico'),
+    icon: getAssetPath('fakl.ico'),
     autoHideMenuBar: true,
     webPreferences: {
       // Security: Enable context isolation for production security
@@ -910,7 +920,7 @@ const setupIpcHandlers = (): void => {
     const notification = new Notification({
       title: title,
       body: data.message,
-      icon: join(__dirname, '../../src/assets/fakl.png'),
+      icon: getAssetPath('fakl.png'),
       silent: false,
       urgency: data.type === 'error' ? 'critical' : 'normal',
       timeoutType: 'default'

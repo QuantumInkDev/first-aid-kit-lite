@@ -17,6 +17,11 @@ extraResources:
     filter:
       - "**/*.ps1"
       - "**/*.json"
+  - from: src/assets
+    to: assets
+    filter:
+      - "*.ico"
+      - "*.png"
 
 win:
   target:

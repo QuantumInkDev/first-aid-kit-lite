@@ -70,10 +70,17 @@ class ScriptRegistryService {
   constructor() {
     this.scriptsDirectory = join(app.getPath('userData'), 'scripts');
 
+    // Determine bundled scripts path based on environment
+    // Production: scripts are in resources/scripts (via extraResources)
+    // Development: scripts are at project root
+    const bundledScriptsPath = app.isPackaged
+      ? join(process.resourcesPath, 'scripts')
+      : join(__dirname, '../../scripts');
+
     this.discoveryConfig = {
       scriptDirectories: [
         this.scriptsDirectory,
-        join(__dirname, '../../scripts'), // Bundled scripts (dist/main -> FAKL root)
+        bundledScriptsPath,
       ],
       allowedExtensions: ['.ps1', '.psm1'],
       maxScriptSize: 10 * 1024 * 1024, // 10MB max

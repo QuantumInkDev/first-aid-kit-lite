@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from 'child_process';
 import { randomBytes } from 'crypto';
 import { join } from 'path';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
+import { app } from 'electron';
 import { createServiceLogger, scriptLogger, securityLogger } from './logger';
 import { getDatabaseService } from './database';
 import type { ScriptDefinition } from './script-registry';
@@ -71,7 +72,8 @@ class PowerShellExecutorService {
   private tempDirectory: string;
 
   constructor() {
-    this.tempDirectory = join(__dirname, '../../../temp/executions');
+    // Use userData path for temp files (works in both dev and production)
+    this.tempDirectory = join(app.getPath('userData'), 'temp', 'executions');
     this.ensureTempDirectory();
     
     // Start queue processor
