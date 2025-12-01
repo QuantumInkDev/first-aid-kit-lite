@@ -68,6 +68,52 @@ export const Scripts: React.FC = () => {
     loadScripts();
   }, []);
 
+  // Listen for protocol requests from browser links
+  useEffect(() => {
+    if (!window.electronAPI?.onProtocolRequest) {
+      console.warn('Protocol request listener not available');
+      return;
+    }
+
+    const handleProtocolRequest = (request: { command: string; scriptId: string; parameters: Record<string, string>; rawUrl: string }) => {
+      console.log('🔗 Protocol request received:', request);
+
+      if (request.command !== 'run') {
+        console.warn('Unknown protocol command:', request.command);
+        return;
+      }
+
+      // Wait for scripts to be loaded before processing
+      if (loading) {
+        console.log('⏳ Scripts still loading, will retry protocol request...');
+        // Retry after a short delay
+        setTimeout(() => handleProtocolRequest(request), 500);
+        return;
+      }
+
+      // Find the script by ID
+      const script = scripts.find((s) => s.id === request.scriptId);
+
+      if (!script) {
+        console.error('❌ Script not found for protocol request:', request.scriptId);
+        window.electronAPI?.showNotification('error', `Tool not found: ${request.scriptId}`);
+        return;
+      }
+
+      console.log('✅ Found script for protocol request:', script.name);
+
+      // Select the script and open confirmation dialog
+      setSelectedScript(script);
+      setConfirmDialogOpen(true);
+    };
+
+    window.electronAPI.onProtocolRequest(handleProtocolRequest);
+
+    return () => {
+      window.electronAPI?.removeProtocolListener?.();
+    };
+  }, [scripts, loading]);
+
   // Extract unique categories from scripts
   const categories = useMemo(() => {
     const uniqueCategories = new Set(scripts.map((script) => script.category));

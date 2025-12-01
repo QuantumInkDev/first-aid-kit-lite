@@ -298,16 +298,69 @@ const createWindow = (): void => {
 
 // Protocol handler for first-aid-kit:// and fak:// URLs
 const handleProtocolUrl = (url: string): void => {
-  console.log('Protocol URL received:', url);
+  mainLogger.info('Protocol URL received:', { url });
   
-  // TODO: Implement protocol handling logic
-  // This will be implemented in Phase 7: Protocol Integration
-  
-  // For now, just log the URL and show the window
+  try {
+    // Parse the protocol URL
+    // Format: first-aid-kit://run/<script-id>?param1=value1&param2=value2
+    // or: fak://run/<script-id>
+    const parsedUrl = new URL(url);
+    const protocol = parsedUrl.protocol.replace(':', ''); // 'first-aid-kit' or 'fak'
+    const command = parsedUrl.hostname; // 'run', 'help', etc.
+    const scriptId = parsedUrl.pathname.replace(/^\//, ''); // Remove leading slash
+    
+    // Parse query parameters
+    const parameters: Record<string, string> = {};
+    parsedUrl.searchParams.forEach((value, key) => {
+      parameters[key] = value;
+    });
+    
+    mainLogger.info('Parsed protocol request:', { protocol, command, scriptId, parameters });
+    
+    // Validate command
+    if (command !== 'run') {
+      mainLogger.warn('Unknown protocol command:', { command });
+      // Still show the window for unknown commands
+      showMainWindow();
+      return;
+    }
+    
+    // Validate script ID
+    if (!scriptId) {
+      mainLogger.warn('No script ID provided in protocol URL');
+      showMainWindow();
+      return;
+    }
+    
+    // Show the window first
+    showMainWindow();
+    
+    // Send protocol request to renderer after a short delay to ensure window is ready
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('protocol:request', {
+          command,
+          scriptId,
+          parameters,
+          rawUrl: url
+        });
+        mainLogger.info('Protocol request sent to renderer:', { scriptId });
+      }
+    }, 500);
+    
+  } catch (error) {
+    mainLogger.error('Failed to parse protocol URL:', { url, error });
+    showMainWindow();
+  }
+};
+
+// Helper to show and focus the main window
+const showMainWindow = (): void => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) {
       mainWindow.restore();
     }
+    mainWindow.show();
     mainWindow.focus();
   } else {
     createWindow();

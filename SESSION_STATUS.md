@@ -1,21 +1,39 @@
 # First Aid Kit Lite - Session Status
 
-## Current Status: Phase 8 - Protocol Integration - READY TO START
+## Current Status: Phase 9 - Testing & Quality Assurance - READY TO START
 
-**Last Updated**: November 30, 2025 - Notification System Complete
-**Current Sprint**: Protocol Integration
-**Overall Progress**: 96% complete
+**Last Updated**: December 1, 2025 - Protocol Integration Complete
+**Current Sprint**: Testing & QA
+**Overall Progress**: 98% complete
 
 ## CONTINUE HERE
 
-**Next Action**: Implement protocol handlers (first-aid-kit:// and fak://)
-**Context**: Phase 7 (Notification System) complete with native Windows notifications. UI fully polished with blue Run buttons, red Cancel buttons. Ready for protocol handler implementation.
+**Next Action**: Begin Phase 9 - Testing & Quality Assurance
+**Context**: Phase 8 (Protocol Integration) complete. Protocol handlers implemented for `first-aid-kit://` and `fak://` protocols. Ready for testing and QA phase.
 **Files to Focus On**:
-- src/main/index.ts (protocol handler registration)
-- Protocol URL parsing and routing
-- Browser integration testing
+- Testing framework setup
+- Integration tests for protocol handling
+- End-to-end testing
 
 ## Recent Progress
+
+### Session December 1, 2025 - Protocol Integration Complete
+- Implemented Protocol URL Parsing:
+  - `handleProtocolUrl()` function parses `first-aid-kit://run/<script-id>?params` format
+  - Extracts command, scriptId, and query parameters
+  - Validates protocol requests and logs all activity
+- Protocol-to-Renderer Communication:
+  - Created `ProtocolRequest` interface for typed communication
+  - Main process sends parsed protocol data to renderer via IPC
+  - Renderer listens for protocol requests and shows confirmation dialog
+- Second-Instance Handling:
+  - Existing app receives protocol URLs when already running
+  - Window focuses and processes the protocol request
+- Updated Files:
+  - `src/main/index.ts` - Protocol parsing and IPC send
+  - `src/preload/preload.ts` - ProtocolRequest type and listener
+  - `src/renderer/pages/Scripts.tsx` - Protocol request handler
+- Note: Protocol testing in dev mode is limited due to registry pointing to electron.exe without app path. Full testing requires packaged app.
 
 ### Session November 30, 2025 - Notification System & Button Styling
 - Implemented Native Windows Notifications:
@@ -79,27 +97,40 @@
 - Click-to-focus functionality
 - Button styling: Blue Run buttons, Red Cancel buttons
 
-### Phase 8: Protocol Integration - READY TO START
-- Register first-aid-kit:// and fak:// protocol handlers
-- Parse protocol URLs for tool execution
-- Browser integration testing
-- Security validation of protocol requests
+### Phase 8: Protocol Integration - COMPLETE
+- Protocol URL parsing: `first-aid-kit://run/<script-id>?param=value`
+- IPC channel `protocol:request` for main-to-renderer communication
+- ProtocolRequest interface with command, scriptId, parameters, rawUrl
+- Renderer listens and triggers confirmation dialog for protocol requests
+- Second-instance handling routes protocol URLs to running app
+- Windows registry registered for both protocols
 
-### Phase 9: Testing & Quality Assurance - PENDING
+### Phase 9: Testing & Quality Assurance - READY TO START
+- Integration tests for protocol handling
+- End-to-end testing
+- Package and test protocol handlers
+
 ### Phase 10: Packaging & Deployment - PENDING
 
 ## Next Session Priorities
 
-1. **CURRENT**: Phase 8 - Protocol Integration
-   - Register custom protocol handlers with Windows
-   - Parse and validate protocol URLs
-   - Route protocol requests to tool execution
-   - Test from browser links
-2. **NEXT**: Phase 9 - Testing & Quality Assurance
-   - Integration tests for protocol handling
-   - End-to-end testing
+1. **CURRENT**: Phase 9 - Testing & Quality Assurance
+   - Set up testing framework
+   - Write integration tests for protocol handling
+   - Test packaged app with protocol links
+2. **NEXT**: Phase 10 - Packaging & Deployment
+   - Build production package
+   - Code signing
+   - Installer creation
 
 ## Important Notes
+
+### Protocol Handler Architecture
+- **URL Format**: `first-aid-kit://run/<script-id>?param1=value1` or `fak://run/<script-id>`
+- **Main Process**: Parses URL, extracts command/scriptId/params, sends to renderer
+- **Renderer**: Listens for `protocol:request`, finds script, opens confirmation dialog
+- **Dev Mode Limitation**: Protocol testing requires packaged app due to registry pointing to electron.exe
+- **Script IDs**: Long format like `p--projects-not-on-cloud-fakl-scripts-clear-temp-ps1-clear-temp`
 
 ### Notification System Architecture
 - Uses Electron's native Notification API

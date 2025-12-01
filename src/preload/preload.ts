@@ -4,32 +4,40 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 console.log('🔧 PRELOAD SCRIPT: Imports loaded successfully');
 
+// Protocol request from browser links
+export interface ProtocolRequest {
+  command: string;
+  scriptId: string;
+  parameters: Record<string, string>;
+  rawUrl: string;
+}
+
 // Define the API that will be available in the renderer process
 export interface ElectronAPI {
   // System information
   getSystemInfo: () => Promise<SystemInfo>;
-  
+
   // Script execution
   executeScript: (scriptId: string, parameters?: Record<string, any>) => Promise<ExecutionResult>;
   cancelScriptExecution: (executionId: string) => Promise<boolean>;
-  
+
   // Script management
   getAvailableScripts: () => Promise<ScriptDefinition[]>;
   getScriptDetails: (scriptId: string) => Promise<ScriptDefinition | null>;
-  
+
   // Execution logs
   getExecutionLogs: (filters?: LogFilters) => Promise<ExecutionLog[]>;
   exportLogs: (format: 'json' | 'csv', filters?: LogFilters) => Promise<string>;
-  
+
   // Settings management
   getSettings: () => Promise<AppSettings>;
   updateSettings: (settings: Partial<AppSettings>) => Promise<void>;
-  
+
   // Notifications
   showNotification: (type: NotificationType, message: string, options?: NotificationOptions) => Promise<void>;
-  
+
   // Protocol handling
-  onProtocolRequest: (callback: (url: string) => void) => void;
+  onProtocolRequest: (callback: (request: ProtocolRequest) => void) => void;
   removeProtocolListener: () => void;
   
   // Event listeners for real-time updates
@@ -218,8 +226,8 @@ const electronAPI: ElectronAPI = {
     ipcRenderer.invoke(IPC_CHANNELS.SHOW_NOTIFICATION, { type, message, options }),
   
   // Protocol handling
-  onProtocolRequest: (callback: (url: string) => void) => {
-    ipcRenderer.on(IPC_CHANNELS.PROTOCOL_REQUEST, (_event, url: string) => callback(url));
+  onProtocolRequest: (callback: (request: ProtocolRequest) => void) => {
+    ipcRenderer.on(IPC_CHANNELS.PROTOCOL_REQUEST, (_event, request: ProtocolRequest) => callback(request));
   },
   
   removeProtocolListener: () => {
