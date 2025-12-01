@@ -152,6 +152,7 @@ coverage/
 # Auto-generated files
 src/**/*.d.ts
 !src/shared/types/**/*.d.ts
+!src/renderer/vite-env.d.ts
 
 # Certificate files (keep these secure and never commit)
 *.p12

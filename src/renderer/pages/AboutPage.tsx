@@ -22,11 +22,11 @@ export const AboutPage: React.FC = () => {
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Version:</span>
-              <span className="font-medium text-gray-900">0.1.0-alpha</span>
+              <span className="font-medium text-gray-900">{__APP_VERSION__}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Build:</span>
-              <span className="font-medium text-gray-900">Development</span>
+              <span className="font-medium text-gray-900">{import.meta.env.DEV ? 'Development' : 'Production'}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Platform:</span>

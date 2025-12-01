@@ -1,22 +1,13 @@
 {
   "name": "first-aid-kit-lite",
-  "version": "0.1.0",
-  "description": "Secure browser-triggered PowerShell maintenance scripts with enhanced confirmation dialogs",
+  "version": "1.0.0-beta.1",
+  "description": "Secure browser-triggered it tool maintenance scripts with enhanced confirmation dialogs",
   "main": "dist/main/index.js",
-  "homepage": "https://github.com/yourusername/first-aid-kit-lite",
   "author": {
-    "name": "First Aid Kit Lite Team",
-    "email": "contact@example.com"
+    "name": "Justin Garcia",
+    "email": "justin_garcia@horizonblue.com"
   },
-  "license": "MIT",
-  "keywords": [
-    "electron",
-    "powershell",
-    "maintenance",
-    "system-tools",
-    "protocol-handler",
-    "windows"
-  ],
+  
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
@@ -78,12 +69,5 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/yourusername/first-aid-kit-lite.git"
-  },
-  "bugs": {
-    "url": "https://github.com/yourusername/first-aid-kit-lite/issues"
   }
 }
