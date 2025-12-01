@@ -39,6 +39,7 @@ export interface ScriptParameter {
 }
 
 export interface ScriptMetadata {
+  id?: string;
   name?: string;
   description?: string;
   timeout?: number;
@@ -201,13 +202,13 @@ class ScriptRegistryService {
     try {
       const stat = statSync(scriptPath);
       const scriptContent = readFileSync(scriptPath, 'utf8');
-      
-      // Generate script ID from file path
-      const scriptId = this.generateScriptId(scriptPath);
-      
-      // Parse metadata from script
+
+      // Parse metadata from script (do this first to get ID from JSON)
       const metadata = await this.parseScriptMetadata(scriptPath, scriptContent);
-      
+
+      // Use ID from JSON metadata if available, otherwise generate from path
+      const scriptId = metadata.id || this.generateScriptId(scriptPath);
+
       // Create script definition
       const scriptDef: ScriptDefinition = {
         id: scriptId,
