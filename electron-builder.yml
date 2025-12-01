@@ -1,6 +1,6 @@
 appId: com.horizonblue.first-aid-kit-lite
 productName: First Aid Kit Lite
-copyright: Copyright © 2025 Justin Garcia
+copyright: Copyright © 2025 Justin Garcia, HBCBSNJ
 
 directories:
   output: release
@@ -16,6 +16,7 @@ extraResources:
     to: scripts
     filter:
       - "**/*.ps1"
+      - "**/*.json"
 
 win:
   target:
