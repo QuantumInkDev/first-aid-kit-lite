@@ -2,20 +2,40 @@
 
 ## Current Status: Phase 9 - Testing & Quality Assurance - READY TO START
 
-**Last Updated**: December 1, 2025 - Protocol Integration Complete
+**Last Updated**: December 1, 2025 - Dashboard & Protocol Improvements
 **Current Sprint**: Testing & QA
-**Overall Progress**: 98% complete
+**Overall Progress**: 99% complete
 
 ## CONTINUE HERE
 
 **Next Action**: Begin Phase 9 - Testing & Quality Assurance
-**Context**: Phase 8 (Protocol Integration) complete. Protocol handlers implemented for `first-aid-kit://` and `fak://` protocols. Ready for testing and QA phase.
+**Context**: Dashboard improvements complete. Protocol handlers now support dynamic script discovery. Ready for testing and QA phase.
 **Files to Focus On**:
 - Testing framework setup
 - Integration tests for protocol handling
 - End-to-end testing
 
 ## Recent Progress
+
+### Session December 1, 2025 - Dashboard & Protocol Improvements
+- Dashboard Improvements:
+  - Quick Actions panel now loads scripts dynamically from script registry
+  - Development Status panel only shows in development mode
+  - Usage Statistics panel added for production mode (placeholder until database connects)
+- Protocol Handler Improvements:
+  - Protocol requests now trigger script registry refresh for newly added scripts
+  - Script IDs from JSON metadata (`id` field) now properly used for cleaner URLs
+- Script Registry Enhancement:
+  - Added `id` field to ScriptMetadata interface
+  - Scripts can use simple IDs like `clear-temp` instead of path-based IDs
+- Database Status:
+  - better-sqlite3 native module requires Visual Studio build tools to rebuild
+  - App gracefully falls back in dev mode (database unavailable)
+  - Production builds will work correctly (electron-builder rebuilds native modules)
+- Updated Files:
+  - `src/renderer/App.tsx` - Dashboard improvements
+  - `src/main/services/script-registry.ts` - ScriptMetadata id field
+  - `src/main/index.ts` - Protocol refresh, dynamic script discovery
 
 ### Session December 1, 2025 - Protocol Integration Complete
 - Implemented Protocol URL Parsing:
