@@ -53,6 +53,10 @@ export interface ElectronAPI {
   restoreSessionState: () => Promise<SessionState | null>;
   onBeforeQuit: (callback: () => Promise<boolean>) => void;
   removeBeforeQuitListener: () => void;
+
+  // Navigation (from tray menu)
+  onNavigate: (callback: (path: string) => void) => void;
+  removeNavigateListener: () => void;
 }
 
 // Type definitions (these will be moved to shared types later)
@@ -188,6 +192,9 @@ const IPC_CHANNELS = {
   SESSION_SAVE_STATE: 'session:save-state',
   SESSION_RESTORE_STATE: 'session:restore-state',
   SESSION_BEFORE_QUIT: 'session:before-quit',
+
+  // Navigation
+  NAVIGATE: 'navigate',
 } as const;
 
 // Create the API implementation
@@ -271,6 +278,15 @@ const electronAPI: ElectronAPI = {
   
   removeBeforeQuitListener: () => {
     ipcRenderer.removeAllListeners(IPC_CHANNELS.SESSION_BEFORE_QUIT);
+  },
+
+  // Navigation (from tray menu)
+  onNavigate: (callback: (path: string) => void) => {
+    ipcRenderer.on(IPC_CHANNELS.NAVIGATE, (_event, path: string) => callback(path));
+  },
+
+  removeNavigateListener: () => {
+    ipcRenderer.removeAllListeners(IPC_CHANNELS.NAVIGATE);
   },
 };
 

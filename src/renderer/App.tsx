@@ -217,6 +217,28 @@ const Dashboard: React.FC = () => {
   );
 };
 
+// Navigation listener component (must be inside Router)
+const NavigationListener: React.FC = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (window.electronAPI?.onNavigate) {
+      window.electronAPI.onNavigate((path: string) => {
+        console.log('🧭 Navigation requested from tray:', path);
+        navigate(path);
+      });
+    }
+
+    return () => {
+      if (window.electronAPI?.removeNavigateListener) {
+        window.electronAPI.removeNavigateListener();
+      }
+    };
+  }, [navigate]);
+
+  return null;
+};
+
 // Main App component
 export const App: React.FC = () => {
   console.log('🚀 REACT APP: Component started, electronReady state initialization');
@@ -226,13 +248,13 @@ export const App: React.FC = () => {
     // Check if electron API is available
     let attempts = 0;
     const maxAttempts = 50; // 5 seconds total
-    
+
     const checkElectronAPI = () => {
       attempts++;
       console.log(`⏳ REACT: Checking for Electron API (attempt ${attempts}/${maxAttempts})...`);
       console.log('🔍 REACT: typeof window.electronAPI:', typeof window.electronAPI);
       console.log('🔍 REACT: window.electronAPI exists:', !!window.electronAPI);
-      
+
       if (window.electronAPI) {
         setElectronReady(true);
         console.log('✅ Electron API ready');
@@ -242,7 +264,7 @@ export const App: React.FC = () => {
         setTimeout(checkElectronAPI, 100);
       } else {
         console.error('❌ Electron API never became available after 5 seconds');
-        console.log('🔍 Window properties containing "electron":', 
+        console.log('🔍 Window properties containing "electron":',
           Object.keys(window).filter(k => k.toLowerCase().includes('electron')));
         setElectronReady(true); // Show UI anyway for debugging
       }
@@ -267,6 +289,7 @@ export const App: React.FC = () => {
     <SettingsProvider>
       <ScriptExecutionProvider>
         <Router>
+          <NavigationListener />
           <div className="min-h-screen bg-gray-50">
             <Routes>
               <Route path="/" element={<Dashboard />} />

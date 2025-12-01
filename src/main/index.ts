@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, Menu, Notification } from 'electron';
+import { app, BrowserWindow, protocol, Menu, Notification, Tray, nativeImage } from 'electron';
 import { join } from 'path';
 import { readFileSync, writeFileSync } from 'fs';
 
@@ -59,6 +59,7 @@ if (existsSync(preloadPath)) {
 // Note: preload script should only run in preload context, not main process
 
 let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
 
 // Session management
 let isQuitting = false;
@@ -132,6 +133,61 @@ const performGracefulShutdown = async (): Promise<boolean> => {
   } catch (error) {
     console.error('❌ Error during graceful shutdown:', error);
     return false;
+  }
+};
+
+// Create system tray
+const createTray = (): void => {
+  const iconPath = join(__dirname, '../../src/assets/fakl.ico');
+  const icon = nativeImage.createFromPath(iconPath);
+
+  tray = new Tray(icon);
+  tray.setToolTip('First Aid Kit Lite');
+
+  // Create minimal context menu (no quit option - users can't easily close the app)
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open First Aid Kit Lite',
+      click: () => {
+        showMainWindow();
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'About',
+      click: () => {
+        showMainWindow();
+        // Navigate to about page after window is shown
+        setTimeout(() => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('navigate', '/about');
+          }
+        }, 500);
+      }
+    }
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Double-click to restore window
+  tray.on('double-click', () => {
+    showMainWindow();
+  });
+
+  console.log('📌 System tray created');
+};
+
+// Configure auto-start on Windows boot
+const configureAutoStart = (): void => {
+  // Only enable auto-start in production
+  if (!isDevelopment) {
+    app.setLoginItemSettings({
+      openAtLogin: true,
+      openAsHidden: true, // Start minimized to tray
+      path: process.execPath,
+      args: ['--hidden']
+    });
+    console.log('🚀 Auto-start configured for Windows boot');
   }
 };
 
@@ -221,15 +277,23 @@ const createWindow = (): void => {
   // Show window when ready to prevent visual flash
   mainWindow.once('ready-to-show', () => {
     if (mainWindow) {
-      console.log('🪟 Window ready to show, displaying window');
-      mainWindow.show();
-      
-      // Restore maximized state if needed
-      if (sessionState?.isMaximized) {
-        mainWindow.maximize();
-        console.log('🪟 Window maximized from previous session');
+      // Check if app was started with --hidden flag (auto-start minimized to tray)
+      const startHidden = process.argv.includes('--hidden') && !isDevelopment;
+
+      if (startHidden) {
+        console.log('📌 App started hidden - minimized to system tray');
+        // Don't show the window, just keep it hidden in tray
+      } else {
+        console.log('🪟 Window ready to show, displaying window');
+        mainWindow.show();
+
+        // Restore maximized state if needed
+        if (sessionState?.isMaximized) {
+          mainWindow.maximize();
+          console.log('🪟 Window maximized from previous session');
+        }
       }
-      
+
       // Open DevTools in development
       if (process.env.NODE_ENV === 'development') {
         console.log('🛠️ Opening DevTools for debugging');
@@ -245,13 +309,22 @@ const createWindow = (): void => {
 
   // Handle window close request
   mainWindow.on('close', async (event) => {
+    // In production: minimize to tray instead of quitting
+    // In development: allow normal close behavior
+    if (!isDevelopment && !isQuitting) {
+      event.preventDefault();
+      console.log('🔽 Minimizing to system tray (production mode)');
+      mainWindow?.hide();
+      return;
+    }
+
     if (!isQuitting) {
       event.preventDefault();
       console.log('🚪 Window close requested, performing graceful shutdown...');
-      
+
       isQuitting = true;
       const shutdownSuccess = await performGracefulShutdown();
-      
+
       if (shutdownSuccess) {
         mainWindow?.destroy();
       } else {
@@ -402,6 +475,12 @@ app.whenReady().then(async () => {
   }
   */
 
+  // Create system tray first
+  createTray();
+
+  // Configure auto-start on Windows boot (production only)
+  configureAutoStart();
+
   createWindow();
 
   // Initialize core services after window creation
@@ -455,10 +534,16 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 }
 
-// Quit when all windows are closed (except on macOS)
+// Quit when all windows are closed (except on macOS and production mode with tray)
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // In production: keep running in tray even when window is closed
+  // In development: quit normally
+  if (isDevelopment && process.platform !== 'darwin') {
     app.quit();
+  }
+  // Production mode: app stays running in system tray
+  if (!isDevelopment) {
+    console.log('📌 App continues running in system tray');
   }
 });
 
