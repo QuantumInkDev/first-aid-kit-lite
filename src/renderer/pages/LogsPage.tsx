@@ -111,11 +111,11 @@ export const LogsPage: React.FC = () => {
         ].join(','))
       ];
       const csv = csvRows.join('\n');
-      downloadFile(csv, 'execution-logs.csv', 'text/csv');
+      downloadFile(csv, 'tool-run-history.csv', 'text/csv');
     } else {
       // JSON export
       const json = JSON.stringify(data, null, 2);
-      downloadFile(json, 'execution-logs.json', 'application/json');
+      downloadFile(json, 'tool-run-history.json', 'application/json');
     }
   };
 
@@ -148,9 +148,9 @@ export const LogsPage: React.FC = () => {
         {/* Page Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Execution Logs</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Run History</h1>
             <p className="mt-2 text-sm text-gray-600">
-              View detailed execution history and export logs for auditing purposes.
+              View detailed tool run history and export logs for auditing purposes.
             </p>
           </div>
           <div className="flex gap-2">
@@ -184,9 +184,9 @@ export const LogsPage: React.FC = () => {
         {/* Statistics Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="Total Executions"
+            title="Total Runs"
             value={stats.total.toString()}
-            icon="📊"
+            icon="🔧"
             color="blue"
           />
           <StatCard
@@ -245,25 +245,25 @@ export const LogsPage: React.FC = () => {
             {/* Results Count */}
             <div className="mt-4 text-sm text-gray-600">
               Showing <span className="font-medium">{filteredExecutions.length}</span> of{' '}
-              <span className="font-medium">{executions.length}</span> executions
+              <span className="font-medium">{executions.length}</span> runs
             </div>
           </CardContent>
         </Card>
 
-        {/* Execution Logs Table */}
+        {/* Tool Run History Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Execution History</CardTitle>
-            <CardDescription>Detailed view of all tool executions</CardDescription>
+            <CardTitle>Run History</CardTitle>
+            <CardDescription>Detailed view of all tool runs</CardDescription>
           </CardHeader>
           <CardContent>
             {filteredExecutions.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-gray-400 text-6xl mb-4">📋</div>
-                <p className="text-gray-600 mb-2">No execution logs found</p>
+                <div className="text-gray-400 text-6xl mb-4">🔧</div>
+                <p className="text-gray-600 mb-2">No tool runs found</p>
                 <p className="text-sm text-gray-500">
                   {executions.length === 0
-                    ? 'Execute a tool to see logs here'
+                    ? 'Run a tool to see history here'
                     : 'Try adjusting your filters'}
                 </p>
               </div>
@@ -385,10 +385,10 @@ export const LogsPage: React.FC = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
               <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear Completed Logs</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear Completed Runs</h3>
                 <p className="text-sm text-gray-600 mb-4">
-                  Are you sure you want to clear all completed execution logs? This action cannot be undone.
-                  Running executions will not be affected.
+                  Are you sure you want to clear all completed tool runs? This action cannot be undone.
+                  Currently running tools will not be affected.
                 </p>
                 <div className="flex gap-3 justify-end">
                   <Button
