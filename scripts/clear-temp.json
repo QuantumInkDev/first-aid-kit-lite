@@ -1,11 +1,12 @@
 {
-  "id": "clear-temp",
-  "name": "Clear Temporary Files",
-  "description": "Remove temporary system files to free up disk space",
-  "version": "1.0.0",
-  "author": "First Aid Kit Lite",
-  "category": "Cleanup",
-  "estimatedDuration": 5000,
-  "tags": ["cleanup", "disk-space", "temp-files", "maintenance"],
-  "compatibleOS": ["Windows 10", "Windows 11"]
+	"id": "clear-temp",
+	"name": "Clear Temporary Files",
+	"description": "Remove temporary internet and system files to free up disk space, performance maintenance, and enhance system speed.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "Cleanup",
+	"estimatedDuration": 5000,
+	"tags": ["cleanup", "disk-space", "temp-files", "maintenance"],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 0
 }

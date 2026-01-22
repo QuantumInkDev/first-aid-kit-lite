@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 
 export interface ScriptExecution {
   id: string;
@@ -12,6 +12,18 @@ export interface ScriptExecution {
   error?: string;
 }
 
+interface ExecutionUpdate {
+  executionId: string;
+  scriptId?: string;
+  scriptName?: string;
+  status: 'running' | 'success' | 'error' | 'cancelled';
+  progress?: number;
+  output?: string;
+  error?: string;
+  duration?: number;
+  exitCode?: number;
+}
+
 interface ScriptExecutionContextValue {
   executions: ScriptExecution[];
   activeExecutions: ScriptExecution[];
@@ -21,12 +33,99 @@ interface ScriptExecutionContextValue {
   cancelExecution: (executionId: string) => void;
   clearExecution: (executionId: string) => void;
   clearAllCompleted: () => void;
+  // Panel visibility control
+  showPanel: boolean;
+  openPanel: () => void;
+  closePanel: () => void;
 }
 
 const ScriptExecutionContext = createContext<ScriptExecutionContextValue | undefined>(undefined);
 
 export const ScriptExecutionProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [executions, setExecutions] = useState<ScriptExecution[]>([]);
+  const [showPanel, setShowPanel] = useState(false);
+
+  const openPanel = useCallback(() => setShowPanel(true), []);
+  const closePanel = useCallback(() => setShowPanel(false), []);
+
+  // Global listener for execution updates (handles protocol-triggered executions)
+  useEffect(() => {
+    if (!window.electronAPI?.onScriptExecutionUpdate) return;
+
+    const handleGlobalUpdate = (update: ExecutionUpdate) => {
+      console.log('Global execution update received:', update);
+
+      setExecutions((prev) => {
+        // First check if there's an execution with matching executionId
+        const existingById = prev.findIndex(e => e.id === update.executionId);
+
+        // Also check if there's already a running execution for this script (UI-initiated)
+        const existingByScriptId = prev.findIndex(
+          e => e.scriptId === update.scriptId && e.status === 'running'
+        );
+
+        if (existingById !== -1) {
+          // Update existing execution by ID
+          return prev.map((exec) =>
+            exec.id === update.executionId
+              ? {
+                  ...exec,
+                  status: update.status,
+                  progress: update.progress ?? exec.progress,
+                  output: update.output ?? exec.output,
+                  error: update.error ?? exec.error,
+                  scriptName: update.scriptName || exec.scriptName,
+                  scriptId: update.scriptId || exec.scriptId,
+                  endTime: ['success', 'error', 'cancelled'].includes(update.status)
+                    ? new Date()
+                    : exec.endTime,
+                }
+              : exec
+          );
+        }
+
+        if (existingByScriptId !== -1) {
+          // There's already a UI-initiated execution for this script - update it instead
+          return prev.map((exec, idx) =>
+            idx === existingByScriptId
+              ? {
+                  ...exec,
+                  status: update.status,
+                  progress: update.progress ?? exec.progress,
+                  output: update.output ?? exec.output,
+                  error: update.error ?? exec.error,
+                  endTime: ['success', 'error', 'cancelled'].includes(update.status)
+                    ? new Date()
+                    : exec.endTime,
+                }
+              : exec
+          );
+        }
+
+        // No existing execution found - this is a protocol-triggered execution
+        if (update.status === 'running' && update.scriptName) {
+          const newExecution: ScriptExecution = {
+            id: update.executionId,
+            scriptId: update.scriptId || 'unknown',
+            scriptName: update.scriptName,
+            status: update.status,
+            startTime: new Date(),
+            progress: update.progress,
+            output: update.output,
+          };
+          return [newExecution, ...prev];
+        }
+
+        return prev;
+      });
+    };
+
+    window.electronAPI.onScriptExecutionUpdate(handleGlobalUpdate);
+
+    return () => {
+      window.electronAPI?.removeScriptExecutionListener?.();
+    };
+  }, []);
 
   // Start a new execution
   const startExecution = useCallback((scriptId: string, scriptName: string): string => {
@@ -103,6 +202,9 @@ export const ScriptExecutionProvider: React.FC<{ children: ReactNode }> = ({ chi
     cancelExecution,
     clearExecution,
     clearAllCompleted,
+    showPanel,
+    openPanel,
+    closePanel,
   };
 
   return (

@@ -11,12 +11,14 @@ interface Script {
   description: string;
   category: string;
   estimatedDuration: number;
+  order?: number;
 }
 
 export const Scripts: React.FC = () => {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<string[]>([]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -27,14 +29,24 @@ export const Scripts: React.FC = () => {
   const [selectedScript, setSelectedScript] = useState<Script | null>(null);
 
   // Execution tracking
-  const { startExecution, updateExecution, executions } = useScriptExecution();
+  const { startExecution, updateExecution, executions, openPanel } = useScriptExecution();
 
-  // Fetch scripts on mount
+  // Fetch scripts and favorites on mount
   useEffect(() => {
-    const loadScripts = async () => {
+    const loadScriptsAndFavorites = async () => {
       try {
         setLoading(true);
         setError(null);
+
+        // Load favorites first
+        if (window.electronAPI?.getFavorites) {
+          try {
+            const loadedFavorites = await window.electronAPI.getFavorites();
+            setFavorites(loadedFavorites || []);
+          } catch (favErr) {
+            console.warn('Failed to load favorites:', favErr);
+          }
+        }
 
         if (window.electronAPI?.getAvailableScripts) {
           const availableScripts = await window.electronAPI.getAvailableScripts();
@@ -49,7 +61,8 @@ export const Scripts: React.FC = () => {
               name: s.name,
               description: s.description,
               category: s.category,
-              estimatedDuration: s.estimatedDuration
+              estimatedDuration: s.estimatedDuration,
+              order: s.order
             })));
           }
         } else {
@@ -65,7 +78,7 @@ export const Scripts: React.FC = () => {
       }
     };
 
-    loadScripts();
+    loadScriptsAndFavorites();
   }, []);
 
   // Listen for protocol requests from browser links
@@ -128,9 +141,26 @@ export const Scripts: React.FC = () => {
     return activeExecution?.status;
   };
 
-  // Filter scripts based on search and filters
+  // Handle toggling favorite status
+  const handleToggleFavorite = async (scriptId: string) => {
+    if (!window.electronAPI?.toggleFavorite) {
+      console.warn('Toggle favorite API not available');
+      return;
+    }
+
+    try {
+      const result = await window.electronAPI.toggleFavorite(scriptId);
+      if (result.success) {
+        setFavorites(result.favorites);
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
+  };
+
+  // Filter and sort scripts based on search and filters
   const filteredScripts = useMemo(() => {
-    return scripts.filter((script) => {
+    const filtered = scripts.filter((script) => {
       // Search filter
       const matchesSearch =
         !searchQuery ||
@@ -141,6 +171,14 @@ export const Scripts: React.FC = () => {
       const matchesCategory = !selectedCategory || script.category === selectedCategory;
 
       return matchesSearch && matchesCategory;
+    });
+
+    // Sort by order (0 first = pinned), then alphabetically
+    return filtered.sort((a, b) => {
+      const orderA = a.order ?? 99;
+      const orderB = b.order ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name);
     });
   }, [scripts, searchQuery, selectedCategory]);
 
@@ -157,11 +195,16 @@ export const Scripts: React.FC = () => {
   };
 
   // Handle confirmed script execution
-  const handleConfirmExecution = async () => {
+  const handleConfirmExecution = async (showOutput: boolean = false) => {
     if (!selectedScript) return;
 
     // Start execution tracking
     const executionId = startExecution(selectedScript.id, selectedScript.name);
+
+    // Open the panel if requested
+    if (showOutput) {
+      openPanel();
+    }
 
     try {
       console.log('✅ Executing tool via IPC:', selectedScript);
@@ -316,9 +359,11 @@ export const Scripts: React.FC = () => {
         <ScriptList
           scripts={filteredScripts.map(script => ({
             ...script,
-            executionStatus: getScriptExecutionStatus(script.id)
+            executionStatus: getScriptExecutionStatus(script.id),
+            isFavorite: favorites.includes(script.id)
           }))}
           onExecute={handleExecuteScript}
+          onToggleFavorite={handleToggleFavorite}
           loading={loading}
           error={error}
         />
@@ -331,11 +376,16 @@ export const Scripts: React.FC = () => {
               setConfirmDialogOpen(false);
               setSelectedScript(null);
             }}
-            onConfirm={handleConfirmExecution}
+            onConfirm={() => handleConfirmExecution(false)}
+            onConfirmAndView={() => handleConfirmExecution(true)}
+            scriptId={selectedScript.id}
             scriptName={selectedScript.name}
             scriptDescription={selectedScript.description}
             estimatedDuration={selectedScript.estimatedDuration}
             category={selectedScript.category}
+            order={selectedScript.order}
+            isFavorite={favorites.includes(selectedScript.id)}
+            onToggleFavorite={handleToggleFavorite}
           />
         )}
       </div>

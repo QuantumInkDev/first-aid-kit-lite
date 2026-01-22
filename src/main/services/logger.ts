@@ -66,12 +66,15 @@ const consoleFormat = winston.format.combine(
   })
 );
 
+// Note: Use DEBUG_LOGGING=1 environment variable to enable debug logs in production
+const enableDebugLogging = process.env.DEBUG_LOGGING === '1' || process.env.NODE_ENV === 'development';
+
 // Create logger transports
 const transports: winston.transport[] = [
   // Main application log file with rotation
   new winston.transports.File({
     filename: join(logsDir, 'application.log'),
-    level: 'info',
+    level: enableDebugLogging ? 'debug' : 'info',
     format: logFormat,
     maxsize: 10 * 1024 * 1024, // 10MB
     maxFiles: 10,
@@ -120,7 +123,7 @@ if (process.env.NODE_ENV === 'development') {
 // Create the main logger
 const logger = winston.createLogger({
   levels: LOG_LEVELS,
-  level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
+  level: enableDebugLogging ? 'debug' : 'info',
   format: logFormat,
   transports,
   // Prevent crashes on uncaught exceptions

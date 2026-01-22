@@ -1,0 +1,12 @@
+{
+	"id": "software-center",
+	"name": "Horizon Software Center",
+	"description": "Launches Horizon's Software Center with a large of catalog of approved software.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "System",
+	"estimatedDuration": 1000,
+	"tags": ["software", "maintenance"],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 1
+}

@@ -1,6 +1,6 @@
-appId: com.horizonblue.first-aid-kit-lite
-productName: First Aid Kit Lite
-copyright: Copyright © 2025 Justin Garcia, HBCBSNJ
+appId: com.horizonblue.first-aid-kit-v3
+productName: First Aid Kit v3
+copyright: Copyright © 2026 Justin Garcia, HBCBSNJ
 
 directories:
   output: release
@@ -41,11 +41,11 @@ nsis:
   installerHeaderIcon: logo/fakl.ico
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: First Aid Kit Lite
+  shortcutName: First Aid Kit v3
   include: build/installer.nsh
 
 protocols:
-  - name: First Aid Kit Protocol
+  - name: First Aid Kit v3 Protocol
     schemes:
       - first-aid-kit
       - fak
@@ -53,10 +53,12 @@ protocols:
 publish: null
 
 asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
 compression: maximum
 
-# Skip native module rebuild - use prebuilt binaries
-npmRebuild: false
+# Rebuild native modules for Electron
+npmRebuild: true
 buildDependenciesFromSource: false
 
 electronLanguages:

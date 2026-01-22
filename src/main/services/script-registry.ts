@@ -21,6 +21,7 @@ export interface ScriptDefinition {
   lastModified: number;
   fileSize: number;
   hash?: string;
+  order?: number;
 }
 
 export interface ScriptParameter {
@@ -49,6 +50,7 @@ export interface ScriptMetadata {
   tags?: string[];
   estimatedDuration?: number;
   parameters?: ScriptParameter[];
+  order?: number;
 }
 
 export interface ScriptDiscoveryConfig {
@@ -231,6 +233,7 @@ class ScriptRegistryService {
         parameters: metadata.parameters || [],
         lastModified: stat.mtime.getTime(),
         fileSize: stat.size,
+        order: metadata.order ?? 99, // Default to 99 if not specified (unpinned)
       };
 
       // Validate script definition
@@ -242,10 +245,12 @@ class ScriptRegistryService {
       // Store script
       this.scripts.set(scriptId, validation.data);
       
-      logger.debug('Script loaded successfully', {
+      logger.info('Script loaded', {
         scriptId,
         name: scriptDef.name,
-        path: scriptPath
+        path: scriptPath,
+        timeout: scriptDef.timeout,
+        timeoutHours: (scriptDef.timeout / 1000 / 60 / 60).toFixed(2)
       });
 
     } catch (error) {

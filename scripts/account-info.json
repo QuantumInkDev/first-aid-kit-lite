@@ -1,0 +1,12 @@
+{
+	"id": "account-info",
+	"name": "Get LAN Account Information",
+	"description": "Gets information about your Horizon LAN account, displays it in a popup and then asks if you want to reset it. If yes, takes to you the Horizon Password Manager site.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "Support",
+	"estimatedDuration": 1000,
+	"tags": ["access", "maintenance", "information", "identity"],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 1
+}

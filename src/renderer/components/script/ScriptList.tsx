@@ -2,8 +2,9 @@ import React from 'react';
 import { ScriptCard, ScriptCardProps } from './ScriptCard';
 
 export interface ScriptListProps {
-  scripts: Omit<ScriptCardProps, 'onExecute'>[];
+  scripts: Omit<ScriptCardProps, 'onExecute' | 'onToggleFavorite'>[];
   onExecute: (scriptId: string) => void;
+  onToggleFavorite?: (scriptId: string) => void;
   loading?: boolean;
   error?: string | null;
 }
@@ -11,6 +12,7 @@ export interface ScriptListProps {
 export const ScriptList: React.FC<ScriptListProps> = ({
   scripts,
   onExecute,
+  onToggleFavorite,
   loading = false,
   error = null,
 }) => {
@@ -84,6 +86,7 @@ export const ScriptList: React.FC<ScriptListProps> = ({
           key={script.id}
           {...script}
           onExecute={onExecute}
+          onToggleFavorite={onToggleFavorite}
         />
       ))}
     </div>

@@ -50,7 +50,7 @@ export const ScriptDefinitionSchema = z.object({
   timeout: z.number()
     .int('Timeout must be an integer')
     .min(1000, 'Timeout must be at least 1 second')
-    .max(3600000, 'Timeout too long (max 1 hour)'), // milliseconds
+    .max(28800000, 'Timeout too long (max 8 hours)'), // milliseconds
   category: SafeStringSchema.max(100, 'Category name too long'),
   version: SafeStringSchema.max(20, 'Version string too long').optional(),
   author: SafeStringSchema.max(100, 'Author name too long').optional(),
@@ -58,11 +58,12 @@ export const ScriptDefinitionSchema = z.object({
   estimatedDuration: z.number()
     .int('Duration must be an integer')
     .min(0, 'Duration cannot be negative')
-    .max(3600000, 'Duration too long (max 1 hour)'), // milliseconds
+    .max(28800000, 'Duration too long (max 8 hours)'), // milliseconds
   lastModified: z.number().int().min(0, 'Last modified timestamp must be non-negative'),
   fileSize: z.number().int().min(0, 'File size must be non-negative'),
   parameters: z.array(ScriptParameterSchema).optional(),
-  hash: SafeStringSchema.max(128, 'Hash too long').optional()
+  hash: SafeStringSchema.max(128, 'Hash too long').optional(),
+  order: z.number().int().min(0).max(999).optional()
 });
 
 // Execution validation
@@ -141,7 +142,7 @@ export const AppSettingsSchema = z.object({
   scriptTimeout: z.number()
     .int('Script timeout must be an integer')
     .min(5000, 'Script timeout must be at least 5 seconds')
-    .max(3600000, 'Script timeout cannot exceed 1 hour'), // milliseconds
+    .max(28800000, 'Script timeout cannot exceed 8 hours'), // milliseconds
   enableDetailedLogging: z.boolean()
 });
 

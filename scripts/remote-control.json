@@ -1,0 +1,12 @@
+{
+	"id": "remote-control",
+	"name": "Service Desk Remote Control",
+	"description": "Lauches Beyond Trust client for Service Desk to remotely connect and control this machine. If client is not available, will fallback to the browser version.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "Support",
+	"estimatedDuration": 5000,
+	"tags": ["shell", "troubleshooting", "access", "maintenance"],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 0
+}

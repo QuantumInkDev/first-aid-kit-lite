@@ -29,7 +29,7 @@ root.render(
 
 // Development: Log when renderer process is ready
 if (process.env.NODE_ENV === 'development') {
-  console.log('First Aid Kit Lite renderer started');
+  console.log('First Aid Kit renderer started');
   console.log('Electron API available:', !!window.electronAPI);
   
   // Test electron API availability

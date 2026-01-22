@@ -11,9 +11,9 @@ export const AboutPage: React.FC = () => {
         <div className="text-center">
           <div className="flex items-center justify-center space-x-4 mb-4">
             <img src={companyLogo} alt="HBC BSN J" className="h-16 w-auto" />
-            <img src={appLogo} alt="First Aid Kit Lite" className="h-16 w-auto" />
+            <img src={appLogo} alt="First Aid Kit" className="h-16 w-auto" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">First Aid Kit Lite</h1>
+          <h1 className="text-3xl font-bold text-gray-900">First Aid Kit V3</h1>
         </div>
 
         {/* Version Info */}
@@ -39,7 +39,7 @@ export const AboutPage: React.FC = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">About</h2>
           <p className="text-sm text-gray-600 leading-relaxed">
-            First Aid Kit Lite is a desktop application that provides a user-friendly interface
+            First Aid Kit is a desktop application that provides a user-friendly interface
             for executing maintenance tools. Designed for IT professionals and
             system administrators, it simplifies routine system maintenance tasks with
             pre-configured, trusted tools.
@@ -92,14 +92,14 @@ export const AboutPage: React.FC = () => {
                 <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                 <span className="text-sm font-medium text-gray-900">Electron</span>
               </div>
-              <span className="text-xs text-gray-500 font-mono">v39.2.2</span>
+              <span className="text-xs text-gray-500 font-mono">v39.2.7</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
                 <span className="text-sm font-medium text-gray-900">React</span>
               </div>
-              <span className="text-xs text-gray-500 font-mono">v19.2.0</span>
+              <span className="text-xs text-gray-500 font-mono">v19.2.3</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -113,22 +113,18 @@ export const AboutPage: React.FC = () => {
                 <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                 <span className="text-sm font-medium text-gray-900">Vite</span>
               </div>
-              <span className="text-xs text-gray-500 font-mono">v7.2.2</span>
+              <span className="text-xs text-gray-500 font-mono">v7.3.0</span>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-cyan-400 rounded-full"></div>
                 <span className="text-sm font-medium text-gray-900">Tailwind CSS</span>
               </div>
-              <span className="text-xs text-gray-500 font-mono">v4.1.17</span>
+              <span className="text-xs text-gray-500 font-mono">v4.1.18</span>
             </div>
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="text-center text-sm text-gray-500">
-          <p>&copy; {new Date().getFullYear()} HBC BSN J. All rights reserved.</p>
-        </div>
       </div>
     </AppLayout>
   );

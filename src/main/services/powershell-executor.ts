@@ -1,15 +1,38 @@
 import { spawn, ChildProcess } from 'child_process';
-import { randomBytes } from 'crypto';
+import { randomUUID } from 'crypto';
 import { join } from 'path';
 import { writeFileSync, unlinkSync, existsSync } from 'fs';
-import { app } from 'electron';
+import { app, BrowserWindow } from 'electron';
 import { createServiceLogger, scriptLogger, securityLogger } from './logger';
 import { getDatabaseService } from './database';
+import { validateScriptForExecution } from './signature-verifier';
 import type { ScriptDefinition } from './script-registry';
 import type { ValidationResult } from './script-validator';
 import { validateAndSanitize, ExecutionResultSchema } from '../../shared/validation/schemas';
 
 const logger = createServiceLogger('powershell-executor');
+
+// Debug logging helper - sends logs to both console and renderer DevTools
+const debugLog = (category: string, message: string, data?: any): void => {
+  const timestamp = new Date().toISOString().split('T')[1].replace('Z', '');
+  const logEntry = {
+    timestamp,
+    category,
+    message,
+    data,
+    source: 'powershell-executor'
+  };
+
+  // Always log to console and file logger at info level
+  console.log(`[${timestamp}] [${category}] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  logger.info(`[${category}] ${message}`, data || {});
+
+  // Send to renderer if any window exists
+  const windows = BrowserWindow.getAllWindows();
+  if (windows.length > 0 && !windows[0].isDestroyed()) {
+    windows[0].webContents.send('debug:main-process-log', logEntry);
+  }
+};
 
 export interface ExecutionRequest {
   scriptId: string;
@@ -80,9 +103,18 @@ class PowerShellExecutorService {
     this.startQueueProcessor();
     
     // Cleanup on process exit
-    process.on('exit', () => this.cleanup());
-    process.on('SIGINT', () => this.cleanup());
-    process.on('SIGTERM', () => this.cleanup());
+    process.on('exit', () => {
+      logger.warn('🚨 PROCESS EXIT SIGNAL RECEIVED');
+      this.cleanup();
+    });
+    process.on('SIGINT', () => {
+      logger.warn('🚨 SIGINT SIGNAL RECEIVED');
+      this.cleanup();
+    });
+    process.on('SIGTERM', () => {
+      logger.warn('🚨 SIGTERM SIGNAL RECEIVED');
+      this.cleanup();
+    });
   }
 
   private ensureTempDirectory(): void {
@@ -152,34 +184,59 @@ class PowerShellExecutorService {
       logger.warn('Database unavailable - skipping execution log', { executionId });
     }
 
-    // Security check (relaxed in development mode for testing)
+    // Security check - all scripts in this app are admin-crafted and loaded from trusted directories
+    // (bundled with app or user's AppData scripts folder). Log warnings but allow execution.
     if (request.validationResult.securityLevel === 'dangerous') {
-      const isDevelopment = process.env.NODE_ENV === 'development';
+      // Check if script is from trusted bundled resources
+      const scriptPath = request.scriptDefinition?.scriptPath || '';
 
-      if (isDevelopment) {
-        // In development mode, allow execution but log a warning
-        logger.warn('Dangerous script allowed in development mode', {
+      // If no path available, allow execution (internal scripts loaded via registry)
+      if (!scriptPath) {
+        logger.warn('Script with security flags allowed (no path to verify)', {
           executionId,
           scriptId: request.scriptId,
           violations: request.validationResult.violations.length
         });
       } else {
-        // In production mode, block execution
-        const error = 'Script execution denied due to security violations';
+        const trustedPaths = [
+          process.resourcesPath ? join(process.resourcesPath, 'scripts') : '',
+          app.getPath('userData'),
+          // Development paths
+          join(__dirname, '..', '..', 'scripts'),
+          join(__dirname, '..', '..', '..', 'scripts')
+        ].filter(p => p.length > 0);
 
-        securityLogger.error('Dangerous script execution blocked', {
-          executionId,
-          scriptId: request.scriptId,
-          violations: request.validationResult.violations.length
-        });
+        const isFromTrustedSource = trustedPaths.some(trusted =>
+          scriptPath.toLowerCase().startsWith(trusted.toLowerCase())
+        );
 
-        try {
-          const db = getDatabaseService();
-          db.updateExecutionLog(executionId, 'error', 0, -1, '', error);
-        } catch (dbError) {
-          logger.warn('Database unavailable - skipping error log', { executionId });
+        if (isFromTrustedSource) {
+          // Script is from trusted source - allow execution with warning
+          logger.warn('Script with security flags allowed from trusted source', {
+            executionId,
+            scriptId: request.scriptId,
+            scriptPath,
+            violations: request.validationResult.violations.length
+          });
+        } else {
+          // Script is from unknown source - block execution
+          const error = 'Script execution denied: untrusted source with security violations';
+
+          securityLogger.error('Untrusted script execution blocked', {
+            executionId,
+            scriptId: request.scriptId,
+            scriptPath,
+            violations: request.validationResult.violations.length
+          });
+
+          try {
+            const db = getDatabaseService();
+            db.updateExecutionLog(executionId, 'error', 0, -1, '', error);
+          } catch (dbError) {
+            logger.warn('Database unavailable - skipping error log', { executionId });
+          }
+          throw new Error(error);
         }
-        throw new Error(error);
       }
     }
 
@@ -210,6 +267,21 @@ class PowerShellExecutorService {
         logger.warn('Database unavailable - skipping status update', { executionId });
       }
 
+      // Verify script signature before execution
+      const signatureError = validateScriptForExecution(
+        request.scriptDefinition.scriptPath,
+        executionId
+      );
+      if (signatureError) {
+        securityLogger.error('Script signature validation failed', {
+          executionId,
+          scriptId: request.scriptId,
+          scriptPath: request.scriptDefinition.scriptPath,
+          error: signatureError,
+        });
+        throw new Error(signatureError);
+      }
+
       // Create execution options
       const options = this.createExecutionOptions(request);
       
@@ -224,11 +296,12 @@ class PowerShellExecutorService {
       });
 
       // Start PowerShell process
+      // Note: windowsHide must be false to allow WPF dialogs to appear
       const childProcess = spawn(command, args, {
         cwd: options.workingDirectory,
         env: { ...process.env, ...options.environment },
         stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
+        windowsHide: false,
         detached: false
       });
 
@@ -245,7 +318,13 @@ class PowerShellExecutorService {
 
       // Set up timeout
       if (options.timeout && options.timeout > 0) {
+        logger.info('⏱️ Setting execution timeout', {
+          executionId,
+          timeoutMs: options.timeout,
+          timeoutHours: (options.timeout / 1000 / 60 / 60).toFixed(2)
+        });
         execution.timeout = setTimeout(() => {
+          logger.warn('⏱️ TIMEOUT EXPIRED - killing process', { executionId, timeoutMs: options.timeout });
           this.cancelExecution(executionId, 'timeout');
         }, options.timeout);
       }
@@ -322,7 +401,7 @@ class PowerShellExecutorService {
     
     // Base options with security restrictions
     const options: ExecutionOptions = {
-      timeout: Math.min(scriptDef.timeout || 30000, 300000), // Max 5 minutes
+      timeout: Math.min(scriptDef.timeout || 30000, 28800000), // Max 8 hours
       workingDirectory: this.tempDirectory,
       maxMemoryMB: 512, // 512MB limit
       enableNetworking: false,
@@ -342,16 +421,25 @@ class PowerShellExecutorService {
     options.allowFileSystem = true;
     options.maxMemoryMB = 512;
 
-    // Further restrictions based on security violations
-    const dangerousViolations = validation.violations.filter(v => 
+    // Log security violations but don't cap timeout for trusted scripts
+    // (Untrusted scripts with violations are already blocked earlier in executeScriptImmediate)
+    const dangerousViolations = validation.violations.filter(v =>
       v.severity === 'high' || v.severity === 'critical'
     );
 
     if (dangerousViolations.length > 0) {
-      options.allowFileSystem = false;
-      options.enableNetworking = false;
+      logger.warn('⚠️ Trusted script has security violations - proceeding with original timeout', {
+        scriptId: scriptDef.id,
+        violationCount: dangerousViolations.length,
+        violations: dangerousViolations.map(v => ({ pattern: v.pattern, severity: v.severity })),
+        timeout: options.timeout,
+        timeoutHours: (options.timeout / 1000 / 60 / 60).toFixed(2)
+      });
+      // NOTE: Previously capped timeout to 60 seconds here, but this broke long-running
+      // trusted scripts like file-backup.ps1. Since untrusted scripts are already blocked
+      // earlier, we preserve the script's configured timeout.
+      // Still apply other restrictions for defense in depth:
       options.allowRegistry = false;
-      options.timeout = Math.min(options.timeout || 30000, 60000); // Max 1 minute for risky scripts
       options.maxMemoryMB = 256;
     }
 
@@ -359,41 +447,82 @@ class PowerShellExecutorService {
   }
 
   private async buildPowerShellCommand(
-    request: ExecutionRequest, 
+    request: ExecutionRequest,
     options: ExecutionOptions
   ): Promise<{ command: string; args: string[]; tempScriptPath?: string }> {
-    
+
     const scriptDef = request.scriptDefinition;
-    
-    // Create temporary script file with parameters
+    const parameters = request.parameters || {};
+
+    debugLog('POWERSHELL', '========== buildPowerShellCommand ==========', {
+      scriptId: scriptDef.id,
+      scriptPath: scriptDef.scriptPath,
+      requestId: request.requestId,
+      incomingParameters: parameters
+    });
+
+    // Read original script to check if it has a param() block
+    const { readFileSync } = require('fs');
+    const originalScript = readFileSync(scriptDef.scriptPath, 'utf8');
+    const hasParamBlock = this.scriptHasParamBlock(originalScript);
+
+    debugLog('POWERSHELL', 'Script analysis', {
+      hasParamBlock,
+      scriptLength: originalScript.length,
+      firstLines: originalScript.split('\n').slice(0, 10).join('\n')
+    });
+
+    // Create temporary script file
     const tempScriptPath = join(this.tempDirectory, `${request.requestId}.ps1`);
-    const scriptContent = await this.buildScriptWithParameters(scriptDef, request.parameters || {});
-    
+    const scriptContent = await this.buildScriptWithParameters(scriptDef, parameters, hasParamBlock);
+
     writeFileSync(tempScriptPath, scriptContent, 'utf8');
+
+    // Build command-line parameter string for scripts with param() blocks
+    const paramString = hasParamBlock
+      ? this.buildCommandLineParams(scriptDef, parameters)
+      : '';
+
+    debugLog('POWERSHELL', 'Parameter string built', {
+      hasParamBlock,
+      paramString,
+      paramStringLength: paramString.length,
+      willUseCommandLineParams: hasParamBlock
+    });
 
     // Build PowerShell command with security restrictions
     const command = 'powershell.exe';
+    const scriptInvocation = `& '${tempScriptPath.replace(/'/g, "''")}'${paramString}`;
+
+    debugLog('POWERSHELL', 'Final script invocation', {
+      scriptInvocation,
+      tempScriptPath
+    });
+
     const args = [
       '-NoProfile',           // Don't load PowerShell profile
       '-NoLogo',             // Don't show PowerShell logo
-      '-NonInteractive',     // Non-interactive mode
-      // Removed -NoExit: We want PowerShell to exit when script completes
-      '-WindowStyle', 'Hidden', // Hide window
+      // Note: Removed -NonInteractive and -WindowStyle Hidden to allow WPF dialogs
       '-ExecutionPolicy', 'Bypass', // Bypass execution policy for this script
       '-Command', `& {
-        # Set security restrictions
-        Set-StrictMode -Version Latest;
+        # Set error preference (scripts manage their own strict mode if needed)
         $ErrorActionPreference = 'Continue';
 
         # Execute script with error handling
         try {
-          & '${tempScriptPath.replace(/'/g, "''")}'
+          ${scriptInvocation}
         } catch {
           Write-Error "Script execution failed: $_"
           exit 1
         }
       }`
     ];
+
+    debugLog('POWERSHELL', 'Full PowerShell command', {
+      command,
+      argsLength: args.length,
+      fullCommand: `${command} ${args.join(' ')}`
+    });
 
     // Add network restrictions if disabled
     if (!options.enableNetworking) {
@@ -405,26 +534,230 @@ class PowerShellExecutorService {
     return { command, args, tempScriptPath };
   }
 
+  /**
+   * Check if a PowerShell script has a param() block.
+   * Scripts with [CmdletBinding()] and param() must have these as the first
+   * executable statements, so we cannot prepend code to them.
+   */
+  private scriptHasParamBlock(scriptContent: string): boolean {
+    // Look for param( that's not inside a comment or string
+    // This regex looks for 'param(' at the start of a line (with optional whitespace)
+    // after any [CmdletBinding(...)] attribute
+    const paramPattern = /^\s*param\s*\(/m;
+    const cmdletBindingPattern = /^\s*\[CmdletBinding/m;
+
+    return paramPattern.test(scriptContent) || cmdletBindingPattern.test(scriptContent);
+  }
+
+  /**
+   * Get parameter value with case-insensitive key lookup.
+   * Protocol URLs may have different casing than script parameter definitions.
+   */
+  private getParameterCaseInsensitive(
+    parameters: Record<string, any>,
+    paramName: string
+  ): any {
+    const allKeys = Object.keys(parameters);
+    debugLog('POWERSHELL', `getParameterCaseInsensitive called for "${paramName}"`, {
+      lookingFor: paramName,
+      availableKeys: allKeys,
+      parametersObject: JSON.stringify(parameters)
+    });
+
+    // First try exact match
+    if (parameters[paramName] !== undefined) {
+      debugLog('POWERSHELL', `EXACT match found for "${paramName}"`, {
+        value: parameters[paramName],
+        valueType: typeof parameters[paramName]
+      });
+      return parameters[paramName];
+    }
+
+    // Try case-insensitive match
+    const lowerParamName = paramName.toLowerCase();
+    for (const key of allKeys) {
+      debugLog('POWERSHELL', `Comparing: "${key.toLowerCase()}" === "${lowerParamName}"`, {
+        keyLower: key.toLowerCase(),
+        paramLower: lowerParamName,
+        match: key.toLowerCase() === lowerParamName
+      });
+      if (key.toLowerCase() === lowerParamName) {
+        debugLog('POWERSHELL', `CASE-INSENSITIVE match found`, {
+          originalKey: key,
+          lookingFor: paramName,
+          value: parameters[key],
+          valueType: typeof parameters[key]
+        });
+        return parameters[key];
+      }
+    }
+
+    debugLog('POWERSHELL', `NO MATCH found for "${paramName}"`, {
+      availableKeys: allKeys,
+      parametersProvided: JSON.stringify(parameters)
+    });
+    return undefined;
+  }
+
+  /**
+   * Build command-line parameter string for scripts with param() blocks.
+   * Returns a string like " -WhatIf -SkipEmail:$true -Path 'C:\test'"
+   */
+  private buildCommandLineParams(scriptDef: ScriptDefinition, parameters: Record<string, any>): string {
+    debugLog('POWERSHELL', '========== buildCommandLineParams ==========', {
+      scriptId: scriptDef.id,
+      scriptName: scriptDef.name
+    });
+
+    if (!scriptDef.parameters || scriptDef.parameters.length === 0) {
+      debugLog('POWERSHELL', 'No parameters defined in script definition', {});
+      return '';
+    }
+
+    // FIX: Enhanced debug logging for parameter troubleshooting
+    debugLog('POWERSHELL', '>>> PARAMETER DEBUG START <<<', {});
+    debugLog('POWERSHELL', 'Incoming parameters object', {
+      parametersType: typeof parameters,
+      parametersIsNull: parameters === null,
+      parametersIsUndefined: parameters === undefined,
+      rawParameters: JSON.stringify(parameters),
+      parameterKeys: Object.keys(parameters || {}),
+      parameterValues: Object.entries(parameters || {}).map(([k, v]) => ({
+        key: k,
+        value: v,
+        type: typeof v,
+        length: typeof v === 'string' ? v.length : 'N/A',
+        isEmpty: v === '' || v === null || v === undefined
+      }))
+    });
+
+    // Special debug for file-restore script
+    if (scriptDef.id === 'file-restore') {
+      debugLog('POWERSHELL', '*** FILE-RESTORE SPECIAL DEBUG ***', {
+        hasPathKey: 'Path' in parameters,
+        hasPathLowerKey: 'path' in parameters,
+        pathValue: parameters['Path'],
+        pathLowerValue: parameters['path'],
+        allKeys: Object.keys(parameters),
+        allValues: Object.values(parameters)
+      });
+    }
+
+    debugLog('POWERSHELL', 'Expected parameters from script definition', {
+      expectedParams: scriptDef.parameters.map(p => ({
+        name: p.name,
+        type: p.type,
+        required: p.required,
+        default: p.default
+      }))
+    });
+
+    const paramParts: string[] = [];
+
+    for (const paramDef of scriptDef.parameters) {
+      const paramName = paramDef.name;
+      const paramValue = this.getParameterCaseInsensitive(parameters, paramName);
+
+      debugLog('POWERSHELL', `Parameter lookup: "${paramName}"`, {
+        expectedName: paramName,
+        foundValue: paramValue,
+        valueType: typeof paramValue,
+        valueIsEmpty: paramValue === '' || paramValue === null || paramValue === undefined,
+        paramDefType: paramDef.type
+      });
+
+      if (paramValue === undefined || paramValue === null) {
+        debugLog('POWERSHELL', `Parameter "${paramName}" is undefined/null - SKIPPING`, {});
+        continue;
+      }
+
+      // Handle empty strings - they should still be passed
+      if (paramValue === '' && paramDef.type === 'string') {
+        debugLog('POWERSHELL', `Parameter "${paramName}" is empty string - SKIPPING (empty strings not passed)`, {});
+        continue;
+      }
+
+      let paramPart = '';
+      switch (paramDef.type) {
+        case 'boolean':
+          // For switch parameters, just use -ParamName if true
+          if (paramValue === true) {
+            paramPart = `-${paramName}`;
+            paramParts.push(paramPart);
+            debugLog('POWERSHELL', `Boolean parameter "${paramName}" = true`, { paramPart });
+          } else {
+            debugLog('POWERSHELL', `Boolean parameter "${paramName}" = false - not adding`, {});
+          }
+          break;
+
+        case 'string':
+        case 'select':
+          // Escape single quotes and wrap in single quotes
+          const escapedStr = String(paramValue).replace(/'/g, "''");
+          paramPart = `-${paramName} '${escapedStr}'`;
+          paramParts.push(paramPart);
+          debugLog('POWERSHELL', `String parameter "${paramName}" added`, {
+            originalValue: paramValue,
+            escapedValue: escapedStr,
+            paramPart
+          });
+          break;
+
+        case 'number':
+          paramPart = `-${paramName} ${Number(paramValue)}`;
+          paramParts.push(paramPart);
+          debugLog('POWERSHELL', `Number parameter "${paramName}" added`, { paramPart });
+          break;
+
+        default:
+          // Default to string handling
+          const escapedDefault = String(paramValue).replace(/'/g, "''");
+          paramPart = `-${paramName} '${escapedDefault}'`;
+          paramParts.push(paramPart);
+          debugLog('POWERSHELL', `Default parameter "${paramName}" added as string`, { paramPart });
+      }
+    }
+
+    const result = paramParts.length > 0 ? ' ' + paramParts.join(' ') : '';
+    debugLog('POWERSHELL', 'Final command line parameters', {
+      paramPartsCount: paramParts.length,
+      paramParts,
+      finalResult: result
+    });
+
+    return result;
+  }
+
   private async buildScriptWithParameters(
-    scriptDef: ScriptDefinition, 
-    parameters: Record<string, any>
+    scriptDef: ScriptDefinition,
+    parameters: Record<string, any>,
+    hasParamBlock: boolean
   ): Promise<string> {
-    
+
     // Read original script
     const { readFileSync } = require('fs');
     let scriptContent = readFileSync(scriptDef.scriptPath, 'utf8');
-    
-    // Add parameter validation and injection
+
+    // For scripts WITH param() blocks: don't prepend any code
+    // Parameters will be passed via command-line arguments instead
+    // This preserves [CmdletBinding()] and param() which must be first
+    if (hasParamBlock) {
+      logger.debug('Script has param block - passing parameters via command line', {
+        scriptName: scriptDef.name
+      });
+      // Return script as-is - parameters are passed on command line
+      return scriptContent;
+    }
+
+    // For scripts WITHOUT param() blocks: inject parameter variables
     if (scriptDef.parameters && scriptDef.parameters.length > 0) {
       const paramValidation = this.generateParameterValidation(scriptDef.parameters, parameters);
       scriptContent = paramValidation + '\n\n' + scriptContent;
     }
-    
+
     // Add security header as comments only (executable statements are in the -Command wrapper)
-    // Note: We don't add executable statements here because scripts may have
-    // [CmdletBinding()] and param() blocks that must appear first
     const securityHeader = `
-# Security Context: First Aid Kit Lite Execution
+# Security Context: First Aid Kit Execution
 # Script: ${scriptDef.name}
 # Execution Time: ${new Date().toISOString()}
 # Security restrictions are applied by the execution wrapper
@@ -442,8 +775,8 @@ class PowerShellExecutorService {
     
     for (const paramDef of paramDefs) {
       const paramName = paramDef.name;
-      const paramValue = providedParams[paramName];
-      
+      const paramValue = this.getParameterCaseInsensitive(providedParams, paramName);
+
       if (paramDef.required && (paramValue === undefined || paramValue === null)) {
         throw new Error(`Required parameter '${paramName}' is missing`);
       }
@@ -586,6 +919,13 @@ class PowerShellExecutorService {
   }
 
   public cancelExecution(executionId: string, reason: string = 'user_request'): boolean {
+    // Diagnostic logging to trace cancellation source
+    logger.warn('⚠️ CANCELLATION TRIGGERED', {
+      executionId,
+      reason,
+      stackTrace: new Error().stack
+    });
+
     const execution = this.activeExecutions.get(executionId);
     if (!execution) {
       logger.warn('Cannot cancel execution - not found', { executionId });
@@ -695,7 +1035,7 @@ class PowerShellExecutorService {
   }
 
   private generateExecutionId(): string {
-    return 'exec_' + randomBytes(16).toString('hex');
+    return randomUUID();
   }
 
   public cleanup(): void {

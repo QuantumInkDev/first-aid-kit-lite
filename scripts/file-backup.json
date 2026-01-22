@@ -1,0 +1,43 @@
+{
+	"id": "file-backup",
+	"name": "File Backup",
+	"description": "Backs up user profile data (Documents, Desktop, Pictures, Signatures, etc.) to network share with progress dialog and email notification.",
+	"version": "3.09",
+	"author": "Justin Garcia",
+	"category": "Maintenance",
+	"estimatedDuration": 5400000,
+	"timeout": 28800000,
+	"tags": ["backup", "files", "data"],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 10,
+	"parameters": [
+		{
+			"name": "WhatIf",
+			"type": "boolean",
+			"required": false,
+			"description": "Dry run - shows what would be copied",
+			"default": false
+		},
+		{
+			"name": "Verbose",
+			"type": "boolean",
+			"required": false,
+			"description": "Shows detailed debug logging in console output",
+			"default": false
+		},
+		{
+			"name": "SkipEmail",
+			"type": "boolean",
+			"required": false,
+			"description": "Skip email notification",
+			"default": false
+		},
+		{
+			"name": "PromptForDeletion",
+			"type": "boolean",
+			"required": false,
+			"description": "Prompt to delete backup after completion",
+			"default": false
+		}
+	]
+}

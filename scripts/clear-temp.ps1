@@ -10,26 +10,30 @@
 
 .NOTES
     Name: clear-temp.ps1
-    Author: First Aid Kit Lite
+    Author: Justin Garcia, Horizon BCBSNJ
     Version: 1.0.0
 #>
 
 [CmdletBinding()]
 param()
 
-# Error handling
+## House Keeping -------------------------------------------------------------------------------------#
+Remove-Variable * -ErrorAction SilentlyContinue; Remove-Module *; $Error.Clear() | Out-Null; Clear-Host
+
+# Error handling -------------------------------------------------------------------------------------#
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
-# Initialize counters
+# Varibles -------------------------------------------------------------------------------------------#
 $totalFilesDeleted = 0
 $totalSpaceFreed = 0
-$errors = @()
+$Errors = @()
 
-Write-Output "=== Clear Temporary Files ===" Write-Output "Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Output "=== Clear Temporary Files ===" 
+Write-Output "[INFO] Started at: $(Get-Date -Format 'MM-dd-yyyy hh:mmtt')"
 Write-Output ""
 
-# Function to safely remove files
+# Functions ------------------------------------------------------------------------------------------#
 function Remove-TempFiles {
     param(
         [string]$Path,
@@ -72,6 +76,7 @@ function Remove-TempFiles {
 
         $spaceMB = [math]::Round($spaceFreed / 1MB, 2)
         Write-Output "[OK] $Description - Deleted $fileCount files, freed $spaceMB MB"
+        Write-Output " "
     }
     catch {
         $script:errors += "Failed to clean $Description`: $_"
@@ -80,37 +85,67 @@ function Remove-TempFiles {
 }
 
 # Clean C Temp
-Remove-TempFiles -Path "C:\Temp" -Description "Windows Temp"
-
+Try {
+    
+    Remove-TempFiles -Path "C:\\Temp" -Description "C:\Temp"
+}
+Catch {
+    #
+}
 # Clean Windows Temp
-Remove-TempFiles -Path "$env:SystemRoot\Temp" -Description "Windows Temp"
+Remove-TempFiles -Path "$env:SystemRoot\Temp" -Description "Windows\Temp"
+
+# Clean User Tmp
+Remove-TempFiles -Path "$env:TMP" -Description "UserEnvironment %TMP%"
 
 # Clean User Temp
-Remove-TempFiles -Path "$env:TEMP" -Description "User Temp"
-
-# Clean Windows Prefetch (if accessible)
-if (Test-Path "$env:SystemRoot\Prefetch") {
-    Remove-TempFiles -Path "$env:SystemRoot\Prefetch" -Description "Windows Prefetch"
-}
+Remove-TempFiles -Path "$env:TEMP" -Description "UserEnvironment %Temp%"
 
 # Clean Recent Items
 Remove-TempFiles -Path "$env:APPDATA\Microsoft\Windows\Recent" -Description "Recent Items"
 
-# Clean Windows Update Cache
-if (Test-Path "$env:SystemRoot\SoftwareDistribution\Download") {
-    Remove-TempFiles -Path "$env:SystemRoot\SoftwareDistribution\Download" -Description "Windows Update Cache"
+# Clean Temporary Internet Files
+Remove-TempFiles -Path "$env:LOCALAPPDATA\Microsoft\Windows\Temporary Internet Files" -Description "Temporary Internet Files"
+
+# Clean Edge Cache Files
+Remove-TempFiles -Path "$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache" -Description "Edge Cache Files"
+
+# Clean Chrome Cache Files
+Remove-TempFiles -Path "$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache" -Description "Chrome Cache Files"
+
+# Clean Java Cache Files
+Remove-TempFiles -Path "$env:USERPROFILE\AppData\LocalLow\Sun\Java" -Description "Java Cache Files"
+
+# Clean Windows Prefetch (if accessible)
+try {
+    if (Test-Path "$env:SystemRoot\Prefetch") {
+        Remove-TempFiles -Path "$env:SystemRoot\Prefetch" -Description "Windows Prefetch"
+    }
+} 
+catch {
+    #
 }
 
-# Clean Delivery Optimization Files
-if (Test-Path "$env:SystemRoot\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache") {
-    Remove-TempFiles -Path "$env:SystemRoot\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache" -Description "Delivery Optimization"
-}
+# Clean Windows Update Cache
+# try {
+#     if (Test-Path "$env:SystemRoot\SoftwareDistribution\Download") {
+#         Remove-TempFiles -Path "$env:SystemRoot\SoftwareDistribution\Download" -Description "Windows Update Cache"
+#     }
+# } 
+# catch {
+#     #
+# }
 
 # Clean Thumbnail Cache
-if (Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Explorer") {
-    Remove-TempFiles -Path "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache_*.db" -Description "Thumbnail Cache"
+try {
+    if (Test-Path "$env:LOCALAPPDATA\Microsoft\Windows\Explorer") {
+        Remove-TempFiles -Path "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache_*.db" -Description "Thumbnail Cache DB"
+    }
+} 
+catch {
+    #
 }
-
+# Output ---------------------------------------------------------------------------------------------#
 # Summary
 Write-Output ""
 Write-Output "=== Summary ==="
@@ -120,13 +155,13 @@ Write-Output "Total space freed: $([math]::Round($totalSpaceFreed / 1MB, 2)) MB 
 if ($errors.Count -gt 0) {
     Write-Output ""
     Write-Output "Errors encountered: $($errors.Count)"
-    foreach ($error in $errors) {
-        Write-Output "  - $error"
+    foreach ($errorr in $errors) {
+        Write-Output "  - $errorr"
     }
 }
 
 Write-Output ""
-Write-Output "Completed at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Output "Completed at: $(Get-Date -Format 'MM-dd-yyyy hh:mm:ss tt')"
 Write-Output "Status: SUCCESS"
 
 # Return success

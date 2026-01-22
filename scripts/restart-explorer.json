@@ -1,11 +1,19 @@
 {
-  "id": "restart-explorer",
-  "name": "Restart Windows Explorer",
-  "description": "Restart the Windows Explorer process to fix taskbar and shell issues",
-  "version": "1.0.0",
-  "author": "First Aid Kit Lite",
-  "category": "System",
-  "estimatedDuration": 3000,
-  "tags": ["system", "explorer", "taskbar", "shell", "troubleshooting"],
-  "compatibleOS": ["Windows 10", "Windows 11"]
+	"id": "restart-explorer",
+	"name": "Restart File Explorer",
+	"description": "Restart the File Explorer process to fix taskbar and shell issues, refresh the desktop, or apply certain system changes without needing a full system reboot.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "System",
+	"estimatedDuration": 3000,
+	"tags": [
+		"system",
+		"explorer",
+		"taskbar",
+		"shell",
+		"troubleshooting",
+		"maintenance"
+	],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 1
 }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { useScriptExecution } from '@/hooks/useScriptExecution';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/common/Card';
@@ -9,14 +9,87 @@ import { cn } from '@/lib/utils';
 type FilterStatus = 'all' | 'success' | 'error' | 'running' | 'cancelled';
 type ExportFormat = 'csv' | 'json';
 
+// Unified execution type for display
+interface DisplayExecution {
+  id: string;
+  scriptId: string;
+  scriptName: string;
+  status: 'pending' | 'running' | 'success' | 'error' | 'cancelled';
+  startTime: Date;
+  endTime?: Date;
+  output?: string;
+  error?: string;
+  progress?: number;
+  source: 'memory' | 'database';
+}
+
 export const LogsPage: React.FC = () => {
-  const { executions, clearAllCompleted } = useScriptExecution();
+  const { executions: memoryExecutions, clearAllCompleted } = useScriptExecution();
+  const [dbLogs, setDbLogs] = useState<DisplayExecution[]>([]);
+  const [dbLoading, setDbLoading] = useState(true);
+
+  // Load logs from database on mount
+  useEffect(() => {
+    const loadDbLogs = async () => {
+      try {
+        if (window.electronAPI?.getExecutionLogs) {
+          const logs = await window.electronAPI.getExecutionLogs();
+          const formattedLogs: DisplayExecution[] = logs.map((log: any) => ({
+            id: log.id,
+            scriptId: log.scriptId,
+            scriptName: log.scriptName,
+            status: log.status,
+            startTime: new Date(log.timestamp),
+            endTime: log.duration ? new Date(new Date(log.timestamp).getTime() + log.duration) : undefined,
+            output: log.output,
+            error: log.error,
+            source: 'database' as const,
+          }));
+          setDbLogs(formattedLogs);
+        }
+      } catch (err) {
+        console.error('Failed to load logs from database:', err);
+      } finally {
+        setDbLoading(false);
+      }
+    };
+    loadDbLogs();
+  }, []);
+
+  // Merge memory and database executions, preferring memory for running ones
+  const executions = useMemo(() => {
+    const memoryIds = new Set(memoryExecutions.map(e => e.id));
+
+    // Convert memory executions to display format
+    const memoryFormatted: DisplayExecution[] = memoryExecutions.map(e => ({
+      id: e.id,
+      scriptId: e.scriptId,
+      scriptName: e.scriptName,
+      status: e.status,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      output: e.output,
+      error: e.error,
+      progress: e.progress,
+      source: 'memory' as const,
+    }));
+
+    // Add database logs that aren't in memory (to avoid duplicates)
+    const dbOnlyLogs = dbLogs.filter(log => !memoryIds.has(log.id));
+
+    // Combine and sort by start time (newest first)
+    return [...memoryFormatted, ...dbOnlyLogs].sort(
+      (a, b) => b.startTime.getTime() - a.startTime.getTime()
+    );
+  }, [memoryExecutions, dbLogs]);
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [clearingAllData, setClearingAllData] = useState(false);
 
   // Statistics
   const stats = useMemo(() => {
@@ -129,10 +202,44 @@ export const LogsPage: React.FC = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleClearLogs = () => {
+  const handleClearLogs = async () => {
+    // Clear from database
+    if (window.electronAPI?.clearExecutionLogs) {
+      try {
+        await window.electronAPI.clearExecutionLogs();
+      } catch (err) {
+        console.error('Failed to clear logs from database:', err);
+      }
+    }
+    // Clear from memory
     clearAllCompleted();
+    // Clear local state
+    setDbLogs([]);
     setShowClearConfirm(false);
     setExpandedRows(new Set());
+  };
+
+  const handleClearAllData = async () => {
+    setClearingAllData(true);
+    try {
+      if (window.electronAPI?.clearAllData) {
+        const result = await window.electronAPI.clearAllData();
+        if (result.success) {
+          // Reload the entire app to reinitialize with fresh database
+          window.location.reload();
+        } else {
+          console.error('Failed to clear all data:', result.message);
+          alert('Failed to clear data: ' + result.message);
+          setClearingAllData(false);
+          setShowClearAllConfirm(false);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to clear all data:', err);
+      alert('Failed to clear data. Please try again.');
+      setClearingAllData(false);
+      setShowClearAllConfirm(false);
+    }
   };
 
   const formatDuration = (startTime: Date, endTime?: Date) => {
@@ -177,6 +284,13 @@ export const LogsPage: React.FC = () => {
               disabled={executions.filter(e => ['success', 'error', 'cancelled'].includes(e.status)).length === 0}
             >
               Clear Completed
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowClearAllConfirm(true)}
+              className="text-sm text-red-600 hover:text-red-700 border-red-300"
+            >
+              Clear All Data
             </Button>
           </div>
         </div>
@@ -257,7 +371,12 @@ export const LogsPage: React.FC = () => {
             <CardDescription>Detailed view of all tool runs</CardDescription>
           </CardHeader>
           <CardContent>
-            {filteredExecutions.length === 0 ? (
+            {dbLoading ? (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading run history...</p>
+              </div>
+            ) : filteredExecutions.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-gray-400 text-6xl mb-4">🔧</div>
                 <p className="text-gray-600 mb-2">No tool runs found</p>
@@ -382,7 +501,7 @@ export const LogsPage: React.FC = () => {
 
         {/* Clear Confirmation Dialog */}
         {showClearConfirm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/65 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
               <div className="p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear Completed Runs</h3>
@@ -402,6 +521,49 @@ export const LogsPage: React.FC = () => {
                     className="bg-red-600 hover:bg-red-700"
                   >
                     Clear Logs
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Clear All Data Confirmation Dialog */}
+        {showClearAllConfirm && (
+          <div className="fixed inset-0 bg-black/65 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-red-600 mb-2">⚠️ Clear All Application Data</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  This will permanently delete all application data including:
+                </p>
+                <ul className="text-sm text-gray-600 mb-4 list-disc list-inside space-y-1">
+                  <li>All run history and logs</li>
+                  <li>Saved settings and preferences</li>
+                  <li>Database and cached data</li>
+                </ul>
+                <div className="bg-amber-50 border border-amber-200 rounded p-3 mb-4">
+                  <p className="text-sm text-amber-800">
+                    <strong>Note:</strong> The app will reload after clearing data and you will be returned to the Dashboard.
+                  </p>
+                </div>
+                <p className="text-sm text-red-600 font-medium mb-4">
+                  This action cannot be undone!
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowClearAllConfirm(false)}
+                    disabled={clearingAllData}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleClearAllData}
+                    className="bg-red-600 hover:bg-red-700"
+                    disabled={clearingAllData}
+                  >
+                    {clearingAllData ? 'Clearing & Reloading...' : 'Clear All Data'}
                   </Button>
                 </div>
               </div>

@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, useNavigate } from 'react-router-dom';
 
 // Import Pages
 import { Scripts as ScriptsPage } from './pages/Scripts';
 import { LogsPage } from './pages/LogsPage';
 import { AboutPage } from './pages/AboutPage';
 import { AppLayout } from './components/layout/AppLayout';
-import { Button } from '@/components/ui/button';
 import { Toaster } from '@/components/ui/toaster';
 import { ScriptExecutionProvider } from '@/hooks/useScriptExecution';
 import { SettingsProvider } from '@/hooks/useSettings';
@@ -18,25 +17,61 @@ const isDevelopment = import.meta.env.DEV;
 interface QuickScript {
   id: string;
   name: string;
+  description: string;
   category: string;
+  estimatedDuration: number;
+  order?: number;
+}
+
+// Import components needed for Dashboard
+import { ConfirmationDialog } from './components/script/ConfirmationDialog';
+import { useScriptExecution } from '@/hooks/useScriptExecution';
+import { SystemInfoPanel } from './components/dashboard/SystemInfoPanel';
+
+// Stats interface
+interface ExecutionStats {
+  total: number;
+  successful: number;
+  failed: number;
+  available: boolean;
 }
 
 // Dashboard Page Component
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [scripts, setScripts] = useState<QuickScript[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [selectedScript, setSelectedScript] = useState<QuickScript | null>(null);
+  const [stats, setStats] = useState<ExecutionStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
-  // Load scripts dynamically
+  const { startExecution, updateExecution, openPanel } = useScriptExecution();
+
+  // Load scripts and favorites dynamically
   useEffect(() => {
-    const loadScripts = async () => {
+    const loadScriptsAndFavorites = async () => {
       try {
+        // Load favorites first
+        if (window.electronAPI?.getFavorites) {
+          try {
+            const loadedFavorites = await window.electronAPI.getFavorites();
+            setFavorites(loadedFavorites || []);
+          } catch (favErr) {
+            console.warn('Failed to load favorites for dashboard:', favErr);
+          }
+        }
+
         if (window.electronAPI?.getAvailableScripts) {
           const availableScripts = await window.electronAPI.getAvailableScripts();
           setScripts(availableScripts.map((s: any) => ({
             id: s.id,
             name: s.name,
-            category: s.category
+            description: s.description,
+            category: s.category,
+            estimatedDuration: s.estimatedDuration,
+            order: s.order
           })));
         }
       } catch (err) {
@@ -45,36 +80,151 @@ const Dashboard: React.FC = () => {
         setLoading(false);
       }
     };
-    loadScripts();
+    loadScriptsAndFavorites();
   }, []);
 
-  // Get top 4 scripts for quick actions (or all if less than 4)
-  const quickActions = scripts.slice(0, 4);
+  // Load execution stats from database
+  useEffect(() => {
+    const loadStats = async () => {
+      try {
+        if (window.electronAPI?.getExecutionStats) {
+          const executionStats = await window.electronAPI.getExecutionStats();
+          setStats(executionStats);
+        }
+      } catch (err) {
+        console.error('Failed to load execution stats:', err);
+      } finally {
+        setStatsLoading(false);
+      }
+    };
+    loadStats();
+  }, []);
+
+  // Refresh stats after successful execution
+  const refreshStats = async () => {
+    try {
+      if (window.electronAPI?.getExecutionStats) {
+        const executionStats = await window.electronAPI.getExecutionStats();
+        setStats(executionStats);
+      }
+    } catch (err) {
+      console.error('Failed to refresh stats:', err);
+    }
+  };
+
+  // Handle Quick Action click
+  const handleQuickAction = (script: QuickScript) => {
+    setSelectedScript(script);
+    setConfirmDialogOpen(true);
+  };
+
+  // Handle favorite toggle
+  const handleToggleFavorite = async (scriptId: string) => {
+    try {
+      if (window.electronAPI?.toggleFavorite) {
+        const newFavorites = await window.electronAPI.toggleFavorite(scriptId);
+        setFavorites(newFavorites || []);
+      }
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
+  };
+
+  // Handle confirmed script execution
+  const handleConfirmExecution = async (showOutput: boolean = false) => {
+    if (!selectedScript) return;
+
+    const executionId = startExecution(selectedScript.id, selectedScript.name);
+
+    if (showOutput) {
+      openPanel();
+    }
+
+    try {
+      window.electronAPI.showNotification('info', `Starting "${selectedScript.name}"...`);
+
+      const updateHandler = (update: any) => {
+        if (update.scriptId === selectedScript.id) {
+          updateExecution(executionId, {
+            status: update.status,
+            progress: update.progress,
+            output: update.output,
+            error: update.error
+          });
+
+          if (update.status === 'success') {
+            window.electronAPI.showNotification('success', `"${selectedScript.name}" completed successfully!`);
+            refreshStats(); // Refresh stats after successful execution
+          } else if (update.status === 'error') {
+            window.electronAPI.showNotification('error', `"${selectedScript.name}" failed: ${update.error || 'Unknown error'}`);
+            refreshStats(); // Refresh stats after failed execution
+          } else if (update.status === 'cancelled') {
+            window.electronAPI.showNotification('warning', `"${selectedScript.name}" was cancelled.`);
+          }
+
+          if (update.status === 'success' || update.status === 'error' || update.status === 'cancelled') {
+            window.electronAPI.removeScriptExecutionListener();
+          }
+        }
+      };
+
+      window.electronAPI.onScriptExecutionUpdate(updateHandler);
+      await window.electronAPI.executeScript(selectedScript.id, {});
+
+      setConfirmDialogOpen(false);
+      setSelectedScript(null);
+    } catch (err) {
+      console.error('Script execution failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
+      updateExecution(executionId, {
+        status: 'error',
+        error: errorMessage,
+      });
+
+      window.electronAPI.showNotification('error', `"${selectedScript.name}" failed to start: ${errorMessage}`);
+      window.electronAPI.removeScriptExecutionListener();
+      setConfirmDialogOpen(false);
+      setSelectedScript(null);
+    }
+  };
+
+  // Get top 8 scripts for quick actions with priority: pinned+favorited > pinned > favorited > default order
+  const quickActions = [...scripts]
+    .sort((a, b) => {
+      const aFav = favorites.includes(a.id);
+      const bFav = favorites.includes(b.id);
+      const aPinned = a.order === 0;
+      const bPinned = b.order === 0;
+
+      // Priority 1: Pinned AND favorited
+      const aBoth = aPinned && aFav;
+      const bBoth = bPinned && bFav;
+      if (aBoth && !bBoth) return -1;
+      if (!aBoth && bBoth) return 1;
+
+      // Priority 2: Pinned only (not favorited)
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
+      // Priority 3: Favorited only (not pinned)
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+
+      // Priority 4: Default order from JSON metadata, then alphabetically
+      const orderA = a.order ?? 99;
+      const orderB = b.order ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, 8);
 
   return (
     <AppLayout>
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* System Status Card */}
-        <div className="bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex items-center">
-              <div className="flex-shrink-0">
-                <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div className="ml-4">
-                <dt className="text-sm font-medium text-gray-500 truncate">System Status</dt>
-                <dd className="mt-1 text-3xl font-semibold text-gray-900">Ready</dd>
-              </div>
-            </div>
-            <div className="mt-4">
-              <p className="text-sm text-gray-600">
-                First Aid Kit Lite is ready to execute maintenance tools.
-              </p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 gap-6">
+        {/* System Info Panel */}
+        <SystemInfoPanel />
 
         {/* Quick Actions Card - Dynamically loaded */}
         <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -92,39 +242,87 @@ const Dashboard: React.FC = () => {
                 </dd>
               </div>
             </div>
-            <div className="space-y-2">
+            <div>
               {loading ? (
                 <div className="text-sm text-gray-500">Loading tools...</div>
               ) : (
                 <>
-                  {quickActions.map((script) => (
-                    <Button
-                      key={script.id}
-                      variant="outline"
-                      className="w-full justify-start text-sm"
-                      onClick={() => navigate('/scripts')}
-                    >
-                      {script.name}
-                    </Button>
-                  ))}
-                  {scripts.length > 4 && (
-                    <Button
-                      variant="outline"
-                      className="w-full justify-start text-sm text-[#00468b]"
-                      onClick={() => navigate('/scripts')}
-                    >
-                      View All {scripts.length} Tools →
-                    </Button>
-                  )}
+                  <div className="grid grid-cols-2 gap-2">
+                    {quickActions.map((script) => {
+                      const isFavorite = favorites.includes(script.id);
+                      const isPinned = script.order === 0;
+                      return (
+                        <button
+                          key={script.id}
+                          type="button"
+                          className="text-left px-4 py-3 text-sm font-medium text-gray-700 bg-gray-50 border border-gray-200 rounded-md hover:bg-[#00468b] hover:text-white hover:border-[#00468b] transition-colors cursor-pointer flex items-center gap-2"
+                          onClick={() => handleQuickAction(script)}
+                        >
+                          {isPinned ? (
+                            <svg
+                              className="w-4 h-4 text-[#00468b] flex-shrink-0"
+                              fill="currentColor"
+                              viewBox="0 0 24 24"
+                              title="Pinned"
+                            >
+                              <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                            </svg>
+                          ) : isFavorite ? (
+                            <svg
+                              className="w-4 h-4 text-yellow-400 fill-yellow-400 flex-shrink-0"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                              />
+                            </svg>
+                          ) : null}
+                          <span className="truncate">{script.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    className="w-full mt-2 text-left px-4 py-3 text-sm font-medium text-[#00468b] bg-gray-50 border border-gray-200 rounded-md hover:bg-[#00468b] hover:text-white hover:border-[#00468b] transition-colors cursor-pointer"
+                    onClick={() => navigate('/scripts')}
+                  >
+                    View All ({scripts.length}) Tools →
+                  </button>
                 </>
               )}
             </div>
           </div>
         </div>
 
+        {/* Confirmation Dialog */}
+        {selectedScript && (
+          <ConfirmationDialog
+            isOpen={confirmDialogOpen}
+            onClose={() => {
+              setConfirmDialogOpen(false);
+              setSelectedScript(null);
+            }}
+            onConfirm={() => handleConfirmExecution(false)}
+            onConfirmAndView={() => handleConfirmExecution(true)}
+            scriptId={selectedScript.id}
+            scriptName={selectedScript.name}
+            scriptDescription={selectedScript.description}
+            estimatedDuration={selectedScript.estimatedDuration}
+            category={selectedScript.category}
+            order={selectedScript.order}
+            isFavorite={favorites.includes(selectedScript.id)}
+            onToggleFavorite={handleToggleFavorite}
+          />
+        )}
+
         {/* Usage Statistics Card - Production only */}
         {!isDevelopment && (
-          <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-2">
+          <div className="bg-white overflow-hidden shadow rounded-lg">
             <div className="px-4 py-5 sm:p-6">
               <div className="flex items-center mb-4">
                 <div className="flex-shrink-0">
@@ -138,80 +336,58 @@ const Dashboard: React.FC = () => {
                 </div>
               </div>
               <div className="bg-gray-50 rounded-lg p-6">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-3xl font-bold text-[#00468b]">--</p>
-                    <p className="text-sm text-gray-500">Total Executions</p>
+                {statsLoading ? (
+                  <div className="text-center text-gray-500">Loading statistics...</div>
+                ) : stats?.available ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <p className="text-3xl font-bold text-[#00468b]">{stats.total}</p>
+                        <p className="text-sm text-gray-500">Total Executions</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-green-600">{stats.successful}</p>
+                        <p className="text-sm text-gray-500">Successful</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-red-600">{stats.failed}</p>
+                        <p className="text-sm text-gray-500">Failed</p>
+                      </div>
+                    </div>
+                    {stats.total === 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <p className="text-sm text-gray-500 text-center">
+                          Run your first tool to see statistics here.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center">
+                    <div className="grid grid-cols-3 gap-4 text-center mb-4">
+                      <div>
+                        <p className="text-3xl font-bold text-gray-300">--</p>
+                        <p className="text-sm text-gray-500">Total Executions</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-gray-300">--</p>
+                        <p className="text-sm text-gray-500">Successful</p>
+                      </div>
+                      <div>
+                        <p className="text-3xl font-bold text-gray-300">--</p>
+                        <p className="text-sm text-gray-500">Failed</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      Database not available. Statistics cannot be tracked.
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-3xl font-bold text-green-600">--</p>
-                    <p className="text-sm text-gray-500">Successful</p>
-                  </div>
-                  <div>
-                    <p className="text-3xl font-bold text-red-600">--</p>
-                    <p className="text-sm text-gray-500">Failed</p>
-                  </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-gray-200">
-                  <p className="text-sm text-gray-500 text-center">
-                    Usage statistics will be available once the database is connected.
-                  </p>
-                </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Development Status Card - Development only */}
-        {isDevelopment && (
-          <div className="bg-white overflow-hidden shadow rounded-lg lg:col-span-2">
-            <div className="px-4 py-5 sm:p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-8 w-8 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-4">
-                    <dt className="text-sm font-medium text-gray-500 truncate">Development Status</dt>
-                    <dd className="mt-1 text-lg font-semibold text-gray-900">Phase 8 Complete - Ready for Phase 9</dd>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-2xl font-bold text-green-600">98%</span>
-                  <p className="text-xs text-gray-500">Overall Progress</p>
-                </div>
-              </div>
-              <div className="mb-4">
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-green-600 h-2 rounded-full" style={{ width: '98%' }}></div>
-                </div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center">
-                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                    <span>Phase 1-7: Foundation through Notifications</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                    <span>Phase 8: Protocol Integration</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-                    <span>Phase 9: Testing & QA (current)</span>
-                  </div>
-                  <div className="flex items-center">
-                    <span className="w-2 h-2 bg-gray-300 rounded-full mr-2"></span>
-                    <span>Phase 10: Packaging & Deployment</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </AppLayout>
   );
@@ -278,7 +454,7 @@ export const App: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading First Aid Kit Lite...</p>
+          <p className="mt-4 text-gray-600">Loading First Aid Kit...</p>
           <p className="text-sm text-gray-500">Phase 1: Foundation Setup</p>
         </div>
       </div>

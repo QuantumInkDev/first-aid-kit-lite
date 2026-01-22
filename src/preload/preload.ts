@@ -16,6 +16,8 @@ export interface ProtocolRequest {
 export interface ElectronAPI {
   // System information
   getSystemInfo: () => Promise<SystemInfo>;
+  getDashboardInfo: () => Promise<DashboardInfo>;
+  getRealtimeMetrics: () => Promise<RealtimeMetrics>;
 
   // Script execution
   executeScript: (scriptId: string, parameters?: Record<string, any>) => Promise<ExecutionResult>;
@@ -27,7 +29,12 @@ export interface ElectronAPI {
 
   // Execution logs
   getExecutionLogs: (filters?: LogFilters) => Promise<ExecutionLog[]>;
+  getExecutionStats: () => Promise<ExecutionStats>;
+  clearExecutionLogs: () => Promise<{ success: boolean; cleared: number }>;
   exportLogs: (format: 'json' | 'csv', filters?: LogFilters) => Promise<string>;
+
+  // Data management
+  clearAllData: () => Promise<{ success: boolean; message: string }>;
 
   // Settings management
   getSettings: () => Promise<AppSettings>;
@@ -57,6 +64,10 @@ export interface ElectronAPI {
   // Navigation (from tray menu)
   onNavigate: (callback: (path: string) => void) => void;
   removeNavigateListener: () => void;
+
+  // Favorites
+  getFavorites: () => Promise<string[]>;
+  toggleFavorite: (scriptId: string) => Promise<{ success: boolean; isFavorite: boolean; favorites: string[] }>;
 }
 
 // Type definitions (these will be moved to shared types later)
@@ -68,6 +79,78 @@ interface SystemInfo {
   isElevated: boolean;
 }
 
+// Dashboard types
+interface DriveSpace {
+  drive: string;
+  total: number;
+  used: number;
+  available: number;
+  percentUsed: number;
+}
+
+interface UptimeInfo {
+  seconds: number;
+  bootTime: string;
+  formatted: string;
+}
+
+interface UserInfo {
+  displayName: string;
+  firstName: string;
+  employeeId: string;
+  samAccountName: string;
+  email: string;
+  source: 'active-directory' | 'cached' | 'unavailable';
+  cachedAt?: number;
+  passwordExpiration: {
+    expiresAt: string | null;
+    daysUntilExpiration: number | null;
+    isExpired: boolean;
+  } | null;
+}
+
+interface NetworkInfo {
+  type: 'Ethernet' | 'WiFi' | 'Unknown' | 'Disconnected';
+  ipAddress: string;
+  adapterName: string;
+}
+
+interface BitLockerInfo {
+  status: 'Encrypted' | 'Decrypted' | 'Encrypting' | 'Decrypting' | 'Unknown' | 'Error';
+  protectionStatus: 'On' | 'Off' | 'Unknown';
+  encryptionPercentage?: number;
+}
+
+interface DashboardInfo {
+  driveSpace: DriveSpace | null;
+  uptime: UptimeInfo;
+  userInfo: UserInfo;
+  lastSeen: string | null;
+  assetSerial: string;
+  osVersion: string;
+  osBuild: string;
+  network: NetworkInfo;
+  bitLocker: BitLockerInfo;
+  timestamp: number;
+  refreshedAt: string;
+}
+
+interface RealtimeMetrics {
+  ram: {
+    total: number;
+    used: number;
+    free: number;
+    percentUsed: number;
+  };
+  cpu: {
+    percentUsed: number;
+    cores: number;
+    model: string;
+    speed: number;
+  };
+  timestamp: number;
+}
+
 interface ScriptDefinition {
   id: string;
   name: string;
@@ -77,6 +160,7 @@ interface ScriptDefinition {
   requiredPermissions: string[];
   parameters?: ScriptParameter[];
   category: string;
+  order?: number;
 }
 
 interface ScriptParameter {
@@ -116,6 +200,13 @@ interface LogFilters {
   status?: string[];
   scriptIds?: string[];
   limit?: number;
+}
+
+interface ExecutionStats {
+  total: number;
+  successful: number;
+  failed: number;
+  available: boolean;
 }
 
 interface AppSettings {
@@ -162,7 +253,9 @@ interface SessionState {
 const IPC_CHANNELS = {
   // System
   GET_SYSTEM_INFO: 'system:get-info',
-  
+  GET_DASHBOARD_INFO: 'system:get-dashboard-info',
+  GET_REALTIME_METRICS: 'system:get-realtime-metrics',
+
   // Script execution
   EXECUTE_SCRIPT: 'script:execute',
   CANCEL_EXECUTION: 'script:cancel',
@@ -174,7 +267,12 @@ const IPC_CHANNELS = {
   
   // Logging
   GET_LOGS: 'log:get',
+  GET_STATS: 'log:stats',
+  CLEAR_LOGS: 'log:clear',
   EXPORT_LOGS: 'log:export',
+
+  // Data management
+  CLEAR_ALL_DATA: 'data:clear-all',
   
   // Settings
   GET_SETTINGS: 'settings:get',
@@ -195,13 +293,22 @@ const IPC_CHANNELS = {
 
   // Navigation
   NAVIGATE: 'navigate',
+
+  // Favorites
+  GET_FAVORITES: 'favorites:get',
+  TOGGLE_FAVORITE: 'favorites:toggle',
+
+  // Debug logging (main process -> renderer)
+  DEBUG_MAIN_PROCESS_LOG: 'debug:main-process-log',
 } as const;
 
 // Create the API implementation
 const electronAPI: ElectronAPI = {
   // System information
   getSystemInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SYSTEM_INFO),
-  
+  getDashboardInfo: () => ipcRenderer.invoke(IPC_CHANNELS.GET_DASHBOARD_INFO),
+  getRealtimeMetrics: () => ipcRenderer.invoke(IPC_CHANNELS.GET_REALTIME_METRICS),
+
   // Script execution
   executeScript: (scriptId: string, parameters?: Record<string, any>) =>
     ipcRenderer.invoke(IPC_CHANNELS.EXECUTE_SCRIPT, { scriptId, parameters }),
@@ -218,10 +325,20 @@ const electronAPI: ElectronAPI = {
   // Execution logs
   getExecutionLogs: (filters?: LogFilters) =>
     ipcRenderer.invoke(IPC_CHANNELS.GET_LOGS, filters),
-  
+
+  getExecutionStats: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.GET_STATS),
+
+  clearExecutionLogs: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLEAR_LOGS),
+
   exportLogs: (format: 'json' | 'csv', filters?: LogFilters) =>
     ipcRenderer.invoke(IPC_CHANNELS.EXPORT_LOGS, { format, filters }),
-  
+
+  // Data management
+  clearAllData: () =>
+    ipcRenderer.invoke(IPC_CHANNELS.CLEAR_ALL_DATA),
+
   // Settings management
   getSettings: () => ipcRenderer.invoke(IPC_CHANNELS.GET_SETTINGS),
   
@@ -288,6 +405,12 @@ const electronAPI: ElectronAPI = {
   removeNavigateListener: () => {
     ipcRenderer.removeAllListeners(IPC_CHANNELS.NAVIGATE);
   },
+
+  // Favorites
+  getFavorites: () => ipcRenderer.invoke(IPC_CHANNELS.GET_FAVORITES),
+
+  toggleFavorite: (scriptId: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_FAVORITE, { scriptId }),
 };
 
 // Expose the API to the renderer process
@@ -335,7 +458,33 @@ window.addEventListener('DOMContentLoaded', () => {
 
 // Security: Prevent context isolation bypass
 window.addEventListener('DOMContentLoaded', () => {
-  console.log('First Aid Kit Lite renderer process ready');
+  console.log('First Aid Kit renderer process ready');
+});
+
+// =============================================================================
+// DEBUG LOGGING - Listen for main process logs and display in DevTools console
+// =============================================================================
+ipcRenderer.on(IPC_CHANNELS.DEBUG_MAIN_PROCESS_LOG, (_event, logEntry: {
+  timestamp: string;
+  category: string;
+  message: string;
+  data?: any;
+  source: string;
+}) => {
+  const style = {
+    'PROTOCOL': 'color: #00ff00; font-weight: bold;',
+    'EXECUTE': 'color: #ff9900; font-weight: bold;',
+    'POWERSHELL': 'color: #00ccff; font-weight: bold;',
+    'ERROR': 'color: #ff0000; font-weight: bold;',
+  }[logEntry.category] || 'color: #888888;';
+
+  console.log(
+    `%c[MAIN][${logEntry.timestamp}][${logEntry.category}] ${logEntry.message}`,
+    style
+  );
+  if (logEntry.data) {
+    console.log('%c  └─ Data:', 'color: #666666;', logEntry.data);
+  }
 });
 
 // Export types for use in renderer process
@@ -346,9 +495,18 @@ export type {
   ExecutionResult,
   ExecutionLog,
   LogFilters,
+  ExecutionStats,
   AppSettings,
   NotificationType,
   NotificationOptions,
   ExecutionUpdate,
   SessionState,
+  // Dashboard types
+  DriveSpace,
+  UptimeInfo,
+  UserInfo,
+  NetworkInfo,
+  BitLockerInfo,
+  DashboardInfo,
+  RealtimeMetrics,
 };

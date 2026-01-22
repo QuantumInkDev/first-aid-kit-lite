@@ -26,6 +26,8 @@ interface RateLimitConfig {
 const isDev = process.env.NODE_ENV === 'development';
 const DEFAULT_RATE_LIMITS: Record<string, RateLimitConfig> = {
   'system:get-info': { windowMs: 60000, maxRequests: isDev ? 100 : 30 },
+  'system:get-dashboard-info': { windowMs: 30000, maxRequests: isDev ? 50 : 10 },
+  'system:get-realtime-metrics': { windowMs: 10000, maxRequests: isDev ? 120 : 60 },
   'script:execute': { windowMs: 60000, maxRequests: 5 },
   'script:cancel': { windowMs: 60000, maxRequests: 10 },
   'script:get-all': { windowMs: 30000, maxRequests: 20 },
@@ -37,7 +39,9 @@ const DEFAULT_RATE_LIMITS: Record<string, RateLimitConfig> = {
   'notification:show': { windowMs: 60000, maxRequests: 30 },
   'session:save-state': { windowMs: 30000, maxRequests: 100 },
   'session:restore-state': { windowMs: 60000, maxRequests: 5 },
-  'session:end-request': { windowMs: 60000, maxRequests: 3 }
+  'session:end-request': { windowMs: 60000, maxRequests: 3 },
+  'favorites:get': { windowMs: 30000, maxRequests: isDev ? 50 : 20 },
+  'favorites:toggle': { windowMs: 60000, maxRequests: isDev ? 50 : 20 }
 };
 
 // Rate limiting storage

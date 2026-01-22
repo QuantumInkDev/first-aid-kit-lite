@@ -1,0 +1,19 @@
+{
+	"id": "refresh-policies",
+	"name": "Refresh Machine Policies",
+	"description": "Refreshes Machine and GPO Policies for the current machine.",
+	"version": "1.0.0",
+	"author": "Justin Garcia",
+	"category": "Maintenance",
+	"estimatedDuration": 5000,
+	"tags": [
+		"shell",
+		"troubleshooting",
+		"access",
+		"performance",
+		"policies",
+		"maintenance"
+	],
+	"compatibleOS": ["Windows 10", "Windows 11"],
+	"order": 1
+}

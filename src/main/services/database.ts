@@ -1,10 +1,15 @@
-import Database from 'better-sqlite3';
+// NOTE: better-sqlite3 is loaded lazily to prevent native module crashes
+// when the binary is not compiled for the correct Electron version
 import { app } from 'electron';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { createServiceLogger } from './logger';
 
 const logger = createServiceLogger('database');
+
+// Dynamic import type for better-sqlite3
+type Database = import('better-sqlite3').Database;
+type DatabaseStatement = import('better-sqlite3').Statement<any[]>;
 
 export interface ExecutionLogRecord {
   id: string;
@@ -42,51 +47,60 @@ export interface AuditLogRecord {
 }
 
 class DatabaseService {
-  private db: Database.Database;
+  private db: Database | null = null;
   private initialized = false;
+  private initError: string | null = null;
 
   constructor() {
     const userDataPath = app.getPath('userData');
     const dbDir = join(userDataPath, 'database');
-    
+
     // Ensure database directory exists
     if (!existsSync(dbDir)) {
       mkdirSync(dbDir, { recursive: true });
     }
 
     const dbPath = join(dbDir, 'fakl.db');
-    
+
     try {
-      this.db = new Database(dbPath, {
-        verbose: (message?: unknown, ...additionalArgs: unknown[]) => 
+      // Lazy-load better-sqlite3 to prevent crashes if native module is incompatible
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const BetterSqlite3 = require('better-sqlite3');
+
+      this.db = new BetterSqlite3(dbPath, {
+        verbose: (message?: unknown, ...additionalArgs: unknown[]) =>
           logger.debug('SQLite:', String(message), ...additionalArgs),
-      });
+      }) as Database;
 
       // Enable WAL mode for better performance
       this.db.pragma('journal_mode = WAL');
-      
+
       // Set reasonable timeouts
       this.db.pragma('busy_timeout = 10000');
-      
+
       // Enable foreign key constraints
       this.db.pragma('foreign_keys = ON');
 
       logger.info('Database connection established', { path: dbPath });
-      
+
       this.initializeSchema();
       this.initializePreparedStatements();
       this.initialized = true;
-      
+
     } catch (error) {
-      logger.error('Failed to initialize database', { 
-        error: (error as Error).message,
-        path: dbPath 
+      const errorMsg = (error as Error).message;
+      this.initError = errorMsg;
+      logger.error('Failed to initialize database', {
+        error: errorMsg,
+        path: dbPath
       });
-      throw error;
+      // Don't throw - allow app to run without database
+      logger.warn('Application will run without database functionality');
     }
   }
 
   private initializeSchema(): void {
+    if (!this.db) return;
     logger.info('Initializing database schema...');
 
     // Create execution_logs table
@@ -164,6 +178,7 @@ class DatabaseService {
   }
 
   private initializePreparedStatements(): void {
+    if (!this.db) return;
     logger.info('Initializing prepared statements...');
 
     // Execution logs statements
@@ -213,19 +228,19 @@ class DatabaseService {
     logger.info('Prepared statements initialized successfully');
   }
 
-  // Prepared statements - initialized after database connection
-  private insertExecutionLogStmt!: Database.Statement<any[]>;
-  private updateExecutionLogStmt!: Database.Statement<any[]>;
-  private selectExecutionLogsStmt!: Database.Statement<any[]>;
-  private insertOrUpdateSettingStmt!: Database.Statement<any[]>;
-  private selectSettingStmt!: Database.Statement<any[]>;
-  private selectAllSettingsStmt!: Database.Statement<any[]>;
-  private insertAuditLogStmt!: Database.Statement<any[]>;
-  private selectAuditLogsStmt!: Database.Statement<any[]>;
+  // Prepared statements - initialized after database connection (may be null if db unavailable)
+  private insertExecutionLogStmt: DatabaseStatement | null = null;
+  private updateExecutionLogStmt: DatabaseStatement | null = null;
+  private selectExecutionLogsStmt: DatabaseStatement | null = null;
+  private insertOrUpdateSettingStmt: DatabaseStatement | null = null;
+  private selectSettingStmt: DatabaseStatement | null = null;
+  private selectAllSettingsStmt: DatabaseStatement | null = null;
+  private insertAuditLogStmt: DatabaseStatement | null = null;
+  private selectAuditLogsStmt: DatabaseStatement | null = null;
 
   // Execution log methods
   public insertExecutionLog(log: ExecutionLogRecord): void {
-    if (!this.initialized) {
+    if (!this.initialized || !this.insertExecutionLogStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -254,14 +269,14 @@ class DatabaseService {
   }
 
   public updateExecutionLog(
-    id: string, 
+    id: string,
     status: ExecutionLogRecord['status'],
     duration?: number,
     exitCode?: number,
     output?: string,
     error?: string
   ): void {
-    if (!this.initialized) {
+    if (!this.initialized || !this.updateExecutionLogStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -283,7 +298,7 @@ class DatabaseService {
   }
 
   public getExecutionLogs(limit: number = 100, offset: number = 0): ExecutionLogRecord[] {
-    if (!this.initialized) {
+    if (!this.initialized || !this.selectExecutionLogsStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -299,7 +314,7 @@ class DatabaseService {
 
   // Settings methods
   public setSetting<T>(key: string, value: T): void {
-    if (!this.initialized) {
+    if (!this.initialized || !this.insertOrUpdateSettingStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -318,7 +333,7 @@ class DatabaseService {
   }
 
   public getSetting<T>(key: string, defaultValue?: T): T | null {
-    if (!this.initialized) {
+    if (!this.initialized || !this.selectSettingStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -342,7 +357,7 @@ class DatabaseService {
   }
 
   public getAllSettings(): Record<string, any> {
-    if (!this.initialized) {
+    if (!this.initialized || !this.selectAllSettingsStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -369,7 +384,7 @@ class DatabaseService {
 
   // Audit log methods
   public insertAuditLog(auditLog: AuditLogRecord): void {
-    if (!this.initialized) {
+    if (!this.initialized || !this.insertAuditLogStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -401,7 +416,7 @@ class DatabaseService {
   }
 
   public getAuditLogs(limit: number = 100, offset: number = 0): AuditLogRecord[] {
-    if (!this.initialized) {
+    if (!this.initialized || !this.selectAuditLogsStmt) {
       throw new Error('Database not initialized');
     }
 
@@ -417,7 +432,7 @@ class DatabaseService {
 
   // Cleanup methods
   public cleanupOldLogs(retentionDays: number = 30): number {
-    if (!this.initialized) {
+    if (!this.initialized || !this.db) {
       throw new Error('Database not initialized');
     }
 
@@ -440,21 +455,54 @@ class DatabaseService {
     }
   }
 
+
+  /**
+   * Clear all completed execution logs (success, error, cancelled)
+   * Running logs are preserved
+   */
+  public clearCompletedLogs(): number {
+    if (!this.initialized || !this.db) {
+      throw new Error('Database not initialized');
+    }
+
+    try {
+      const result = this.db.prepare(`
+        DELETE FROM execution_logs WHERE status IN ('success', 'error', 'cancelled')
+      `).run();
+
+      logger.info('Cleared completed execution logs', { 
+        deleted_count: result.changes 
+      });
+
+      return result.changes;
+    } catch (error) {
+      logger.error('Failed to clear completed logs', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
   // Health check
   public healthCheck(): { status: 'healthy' | 'unhealthy'; details: string } {
+    if (!this.db) {
+      return {
+        status: 'unhealthy',
+        details: this.initError || 'Database not initialized'
+      };
+    }
+
     try {
       // Simple query to test database connection
       const result = this.db.prepare('SELECT 1 as test').get() as { test: number };
-      
+
       if (result.test === 1) {
         return { status: 'healthy', details: 'Database connection is working' };
       } else {
         return { status: 'unhealthy', details: 'Database query returned unexpected result' };
       }
     } catch (error) {
-      return { 
-        status: 'unhealthy', 
-        details: `Database error: ${(error as Error).message}` 
+      return {
+        status: 'unhealthy',
+        details: `Database error: ${(error as Error).message}`
       };
     }
   }
@@ -463,7 +511,46 @@ class DatabaseService {
   public close(): void {
     if (this.db) {
       this.db.close();
+      this.db = null;
+      this.initialized = false;
       logger.info('Database connection closed');
+    }
+  }
+
+  // Reinitialize database (used after clearing all data)
+  public reinitialize(): void {
+    const userDataPath = app.getPath('userData');
+    const dbDir = join(userDataPath, 'database');
+
+    // Ensure database directory exists
+    if (!existsSync(dbDir)) {
+      mkdirSync(dbDir, { recursive: true });
+    }
+
+    const dbPath = join(dbDir, 'fakl.db');
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const BetterSqlite3 = require('better-sqlite3');
+
+      this.db = new BetterSqlite3(dbPath, {
+        verbose: (message?: unknown, ...additionalArgs: unknown[]) =>
+          logger.debug('SQLite:', String(message), ...additionalArgs),
+      }) as Database;
+
+      this.db.pragma('journal_mode = WAL');
+      this.db.pragma('busy_timeout = 10000');
+      this.db.pragma('foreign_keys = ON');
+
+      this.initializeSchema();
+      this.initializePreparedStatements();
+      this.initialized = true;
+      this.initError = null;
+      logger.info('Database reinitialized successfully', { path: dbPath });
+    } catch (error) {
+      this.initError = (error as Error).message;
+      logger.error('Failed to reinitialize database', { error: this.initError });
+      throw error;
     }
   }
 
@@ -474,12 +561,41 @@ class DatabaseService {
 
 // Create and export singleton instance
 let databaseService: DatabaseService | null = null;
+let databaseInitFailed = false;
 
 export const getDatabaseService = (): DatabaseService => {
+  if (databaseInitFailed) {
+    throw new Error('Database service unavailable - native module failed to load');
+  }
+
   if (!databaseService) {
-    databaseService = new DatabaseService();
+    try {
+      databaseService = new DatabaseService();
+      // Check if initialization succeeded
+      if (!databaseService.isInitialized()) {
+        databaseInitFailed = true;
+        throw new Error('Database service failed to initialize');
+      }
+    } catch (error) {
+      databaseInitFailed = true;
+      throw error;
+    }
   }
   return databaseService;
+};
+
+// Check if database service is available without throwing
+export const isDatabaseAvailable = (): boolean => {
+  if (databaseInitFailed) return false;
+  if (databaseService) return databaseService.isInitialized();
+
+  // Try to initialize
+  try {
+    const db = getDatabaseService();
+    return db.isInitialized();
+  } catch {
+    return false;
+  }
 };
 
 export default getDatabaseService;

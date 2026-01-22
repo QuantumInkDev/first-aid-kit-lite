@@ -120,6 +120,8 @@ Desktop.ini
 tmp/
 temp/
 .tmp/
+incoming/
+planning/
 
 # PowerShell execution logs (for development)
 powershell-logs/
@@ -160,6 +162,7 @@ src/**/*.d.ts
 *.crt
 *.key
 *.pem
+certs/
 
 # Windows specific
 ehthumbs.db

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Badge } from '../common/Badge';
 import { useScriptExecution } from '@/hooks/useScriptExecution';
 import { ExecutionStatusPanel } from '../execution/ExecutionStatusPanel';
@@ -6,8 +6,7 @@ import companyLogo from '@assets/HBCBSNJ.png';
 import appLogo from '@assets/fakl.png';
 
 export const Header: React.FC = () => {
-  const [showExecutionPanel, setShowExecutionPanel] = useState(false);
-  const { activeExecutions } = useScriptExecution();
+  const { activeExecutions, showPanel, openPanel, closePanel } = useScriptExecution();
 
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm">
@@ -23,11 +22,11 @@ export const Header: React.FC = () => {
             {/* App Logo */}
             <img
               src={appLogo}
-              alt="First Aid Kit Lite"
+              alt="First Aid Kit"
               className="h-10 w-auto"
             />
             <div>
-              <h1 className="text-3xl font-bold text-primary">First Aid Kit Lite</h1>
+              <h1 className="text-3xl font-bold text-primary">First Aid Kit</h1>
             </div>
             <Badge variant="info" className="ml-2">
               v{__APP_VERSION__}
@@ -38,7 +37,7 @@ export const Header: React.FC = () => {
             {/* Active Runs Button */}
             <div className="relative">
               <button
-                onClick={() => setShowExecutionPanel(!showExecutionPanel)}
+                onClick={() => showPanel ? closePanel() : openPanel()}
                 className="relative flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 <svg
@@ -64,8 +63,8 @@ export const Header: React.FC = () => {
               </button>
 
               <ExecutionStatusPanel
-                isOpen={showExecutionPanel}
-                onClose={() => setShowExecutionPanel(false)}
+                isOpen={showPanel}
+                onClose={closePanel}
               />
             </div>
           </div>

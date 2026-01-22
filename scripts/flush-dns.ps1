@@ -16,10 +16,14 @@
 [CmdletBinding()]
 param()
 
+## House Keeping -------------------------------------------------------------------------------------#
+Remove-Variable * -ErrorAction SilentlyContinue; Remove-Module *; $Error.Clear() | Out-Null; Clear-Host
+
+# Error handling -------------------------------------------------------------------------------------#
 $ErrorActionPreference = "Stop"
 
 Write-Output "=== Flush DNS Cache ==="
-Write-Output "Started at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+Write-Output "[INFO] Started at: $(Get-Date -Format 'MM-dd-yyyy hh:mmtt')"
 Write-Output ""
 
 try {
@@ -45,7 +49,7 @@ try {
     Write-Output "Entries after: $entriesAfter"
     Write-Output "Entries cleared: $($entriesBefore - $entriesAfter)"
     Write-Output ""
-    Write-Output "Completed at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+    Write-Output "Completed at: $(Get-Date -Format 'MM-dd-yyyy hh:mm:ss tt')"
     Write-Output "Status: SUCCESS"
 
     exit 0
